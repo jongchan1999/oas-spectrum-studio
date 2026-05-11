@@ -429,7 +429,7 @@ def render_chemical_table(species: list[str], values: np.ndarray) -> None:
     })
     st.dataframe(
         frame,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         column_config={
             "Species": st.column_config.TextColumn("Species", width="small"),
@@ -752,7 +752,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                      if method == "Linear regression"
                      else "Run machine learning analysis")
         run_clicked = st.button(run_label, type="primary", key="single_run_btn",
-                                use_container_width=True)
+                                width="stretch")
 
         # Always show preview if both files are uploaded — same UI for LR and ML.
         if ref_file and meas_file:
@@ -773,7 +773,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                         measured=meas_spectrum.values[mask],
                         title="Uploaded spectra preview",
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
             except Exception as exc:
                 st.warning(f"Could not preview the spectra: {exc}")
@@ -834,7 +834,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
             with c2:
                 st.plotly_chart(
                     make_species_bar(result["species"], result["number_densities"]),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with tab_validate:
@@ -849,7 +849,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                     species_frame=per_species_frame,
                     title="Measured vs reconstructed OD",
                 ),
-                use_container_width=True,
+                width="stretch",
             )
             st.caption(
                 "Solid traces: measured vs full reconstruction. "
@@ -869,7 +869,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 data=recon_frame.to_csv(index=False).encode("utf-8"),
                 file_name="oas_reconstruction.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
             if inputs.get("cl_consent"):
                 if result["kind"] == "linear":
@@ -896,7 +896,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                     data=cl_frame.to_csv(index=False).encode("utf-8"),
                     file_name=cl_name,
                     mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
             else:
                 st.caption("Enable the *continual-learning* checkbox above to unlock the CL export.")
@@ -940,7 +940,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                      if method == "Linear regression"
                      else "Run machine learning analysis")
         run_clicked = st.button(run_label, type="primary", key="ts_run_btn",
-                                use_container_width=True)
+                                width="stretch")
 
         if uploads:
             st.caption(f"📁 {len(uploads)} files loaded.")
@@ -1004,14 +1004,14 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
         )
 
         with tab_trend:
-            st.plotly_chart(make_timeseries_trend(summary_table), use_container_width=True)
+            st.plotly_chart(make_timeseries_trend(summary_table), width="stretch")
             st.caption("Y-axis is log-scaled. Zero values are hidden by Plotly; this is expected.")
 
         with tab_summary:
             display_table = summary_table.copy()
             for col in species_cols:
                 display_table[col] = display_table[col].map(lambda v: f"{v:.3e}")
-            st.dataframe(display_table, use_container_width=True, hide_index=True, height=380)
+            st.dataframe(display_table, width="stretch", hide_index=True, height=380)
 
         with tab_validate:
             if not labels:
@@ -1059,7 +1059,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         species_frame=per_species_frame,
                         title=f"Validation · {labels[sel]}",
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
                 if diag:
                     render_diagnostics(**diag)
@@ -1070,14 +1070,14 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                 data=summary_table.to_csv(index=False).encode("utf-8"),
                 file_name="time_series_oas_summary.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width="stretch",
             )
             st.download_button(
                 "Download summary (Excel)",
                 data=dataframe_to_excel_bytes(summary_table, sheet_name="Time-series OAS"),
                 file_name="time_series_oas_summary.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
+                width="stretch",
             )
             if ts_inputs.get("cl_consent"):
                 if ts_payload["kind"] == "linear":
@@ -1098,7 +1098,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         data=cl_frame.to_csv(index=False).encode("utf-8"),
                         file_name=cl_name,
                         mime="text/csv",
-                        use_container_width=True,
+                        width="stretch",
                     )
                 else:
                     st.info("Continual-learning dataset is empty.")
@@ -1120,7 +1120,7 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        if st.sidebar.button("Sign out", use_container_width=True):
+        if st.sidebar.button("Sign out", width="stretch"):
             st.session_state.pop("authenticated", None)
             st.rerun()
         return
@@ -1157,7 +1157,7 @@ def require_login_if_enabled() -> None:
     with st.form("login_form", clear_on_submit=False):
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("Sign in", type="primary", width="stretch")
 
     if submitted:
         ok = any(
