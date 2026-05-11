@@ -22,8 +22,8 @@ ts_debug_*.txt
 ts_smoke_*.txt
 smoke_run_out.txt
 
-# Large data + checkpoints (exceed GitHub 100MB single-file limit / not source)
-machine_learning/*.pth
+# Large data archives that do not belong in source control.
+# Note: ML checkpoints (*.pth) are tracked via Git LFS — see .gitattributes.
 *.zip
 *.pptx
 
