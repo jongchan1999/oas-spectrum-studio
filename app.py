@@ -663,7 +663,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
                 <span class="brand-name">OAS Studio</span>
             </div>
             <div class="brand-tagline">Optical Absorption Spectroscopy</div>
-            <div class="brand-version">v1.0 · LFS</div>
+            <div class="brand-version">v1.0</div>
         </div>
         """)
 
@@ -976,8 +976,6 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 )
             except Exception as exc:
                 st.warning(f"Could not preview the spectra: {exc}")
-        else:
-            st.info("Upload both I₀ and It files, then click *Run* to compute the reconstruction.")
 
     # ── Run handler ────────────────────────────────────────────
     if run_clicked:
@@ -1192,10 +1190,16 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
         species_cols = [c for c in summary_table.columns if c != "Time (s)"]
         detected = [sp for sp in species_cols if summary_table[sp].astype(float).abs().sum() > 0]
 
+        if "Time (s)" in summary_table.columns and len(summary_table) > 0:
+            time_axis = summary_table["Time (s)"].astype(float)
+            duration_s = float(time_axis.max() - time_axis.min())
+        else:
+            duration_s = 0.0
+
         mcols = st.columns(4)
         mcols[0].metric("Timepoints", len(summary_table))
-        mcols[1].metric("Species tracked", len(species_cols))
-        mcols[2].metric("Detected (any t)", len(detected))
+        mcols[1].metric("Detected species", f"{len(detected)} / {len(species_cols)}")
+        mcols[2].metric("Duration", f"{duration_s:.0f} s")
         mcols[3].metric("Method", method.split()[0])
 
         tab_trend, tab_summary, tab_validate, tab_downloads = st.tabs(
