@@ -637,6 +637,7 @@ def run_time_series_from_intensity_files(
     wave_low: float = WAVE_LOW_DEFAULT,
     wave_high: float = WAVE_HIGH_DEFAULT,
     config: FitConfig | None = None,
+    progress_callback=None,
 ) -> TimeSeriesAnalysisResult:
     if len(files) < 2:
         raise ValueError("At least two files are required: one reference (I0) and one measured spectrum.")
@@ -717,6 +718,12 @@ def run_time_series_from_intensity_files(
         summary_rows.append(row)
         labels.append(name)
         single_results.append(result)
+
+        if progress_callback is not None:
+            try:
+                progress_callback(fallback_index, len(sorted_files) - 1)
+            except Exception:
+                pass
 
     summary_table = pd.DataFrame(summary_rows).sort_values("Time (s)").reset_index(drop=True)
     return TimeSeriesAnalysisResult(

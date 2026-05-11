@@ -643,6 +643,7 @@ def run_timeseries_analysis(
     cross_dir: str,
     path_length_cm: float,
     config: FitConfig,
+    progress_callback=None,
 ) -> dict:
     if method == "Linear regression":
         result = run_time_series_from_intensity_files(
@@ -650,6 +651,7 @@ def run_timeseries_analysis(
             cross_section_dir=cross_dir,
             path_length_cm=path_length_cm,
             config=config,
+            progress_callback=progress_callback,
         )
         return {
             "kind": "linear",
@@ -668,6 +670,7 @@ def run_timeseries_analysis(
         model_file=ML_DEFAULT_PTH,
         exp_id=4,
         path_length_cm=path_length_cm,
+        progress_callback=progress_callback,
     )
     return {
         "kind": "ml",
@@ -688,8 +691,9 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
 
     render_hero(
         title="Single OAS analysis",
-        subtitle=("Upload reference I₀ and measured It spectra. The app computes optical depth, "
-                  "estimates species number densities, and validates the reconstruction."),
+        subtitle=("Upload a single measured spectrum together with the reference I₀. "
+                  "The app computes optical depth, estimates concentrations for 8 chemical "
+                  "species, and validates the reconstruction."),
         badge=f"Single · {method}",
     )
 
@@ -890,8 +894,9 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
 
     render_hero(
         title="Time-series OAS analysis",
-        subtitle=("Upload a sequence of spectra (I₀ + measurements). The file with the lowest "
-                  "numeric suffix is treated as I₀ and the rest are processed in order."),
+        subtitle=("Upload a sequence of measured spectra. The file with the lowest numeric "
+                  "suffix is treated as I₀, and the rest are processed in order. Observe the "
+                  "species trends in real time and download the final summary."),
         badge=f"Time-series · {method}",
     )
 
@@ -929,14 +934,23 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
             st.error("Upload at least two files (I₀ + one measurement).")
         else:
             file_items = [(u.name, u.getvalue()) for u in uploads]
+            progress = st.progress(0.0, text="Processing time-series…")
+
+            def _on_step(done: int, total: int) -> None:
+                ratio = done / max(total, 1)
+                progress.progress(ratio, text=f"Processing time-series… {done}/{total}")
+
             try:
-                ts_payload = run_timeseries_analysis(
-                    method=method,
-                    file_items=file_items,
-                    cross_dir=selected_cross,
-                    path_length_cm=float(path_length_cm),
-                    config=config,
-                )
+                with st.spinner(f"Running {method.lower()} on {len(file_items)} frames…"):
+                    ts_payload = run_timeseries_analysis(
+                        method=method,
+                        file_items=file_items,
+                        cross_dir=selected_cross,
+                        path_length_cm=float(path_length_cm),
+                        config=config,
+                        progress_callback=_on_step,
+                    )
+                progress.empty()
                 st.session_state["ts_result"] = ts_payload
                 st.session_state["ts_inputs"] = {
                     "path_length": float(path_length_cm),
@@ -944,6 +958,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                     "cl_consent": bool(cl_enabled),
                 }
             except Exception as exc:
+                progress.empty()
                 st.error(f"Time-series analysis failed: {exc}")
                 st.session_state.pop("ts_result", None)
 

@@ -134,10 +134,22 @@ def denormalize_prediction(prediction: torch.Tensor, exp_id: int) -> torch.Tenso
     return prediction
 
 
-def run_ml_inference(
+def load_ml_model(
+    model_file: str | Path | BinaryIO | bytes,
+    exp_id: int,
+) -> SpectrumCNN:
+    """Materialise the CNN with the given checkpoint. Reuse for time-series."""
+    model = SpectrumCNN(num_classes=len(SPECIES_ORDER), exp_id=exp_id)
+    state_dict = torch.load(BytesIO(_load_bytes(model_file)), map_location="cpu")
+    model.load_state_dict(state_dict)
+    model.eval()
+    return model
+
+
+def _run_ml_inference_with_model(
+    model: SpectrumCNN,
     absorbance: SpectrumData,
     cross_sections: CrossSectionData,
-    model_file: str | Path | BinaryIO | bytes,
     exp_id: int,
     path_length_cm: float,
 ) -> MLResult:
@@ -150,11 +162,6 @@ def run_ml_inference(
         left=0.0,
         right=0.0,
     )
-
-    model = SpectrumCNN(num_classes=len(SPECIES_ORDER), exp_id=exp_id)
-    state_dict = torch.load(BytesIO(_load_bytes(model_file)), map_location="cpu")
-    model.load_state_dict(state_dict)
-    model.eval()
 
     with torch.no_grad():
         output = model(prepare_image(target_absorbance))[0].cpu()
@@ -190,6 +197,26 @@ def run_ml_inference(
     )
 
 
+def run_ml_inference(
+    absorbance: SpectrumData,
+    cross_sections: CrossSectionData,
+    model_file: str | Path | BinaryIO | bytes,
+    exp_id: int,
+    path_length_cm: float,
+) -> MLResult:
+    """Single-shot ML inference. For batched/time-series use, load the model
+    once with `load_ml_model` and call `_run_ml_inference_with_model` directly.
+    """
+    model = load_ml_model(model_file, exp_id)
+    return _run_ml_inference_with_model(
+        model=model,
+        absorbance=absorbance,
+        cross_sections=cross_sections,
+        exp_id=exp_id,
+        path_length_cm=path_length_cm,
+    )
+
+
 def run_time_series_ml_from_intensity_files(
     files: list[tuple[str, bytes]],
     cross_section_dir: str | Path,
@@ -198,11 +225,15 @@ def run_time_series_ml_from_intensity_files(
     path_length_cm: float,
     wave_low: float = WAVE_LOW_DEFAULT,
     wave_high: float = WAVE_HIGH_DEFAULT,
+    progress_callback=None,
 ) -> TimeSeriesMLResult:
     """Run ML inference for a time-series of spectra.
 
     Mirrors `analysis.run_time_series_from_intensity_files` so the UI layer
     stays declarative. The first file (smallest numeric suffix) is I0.
+
+    progress_callback: optional callable(done: int, total: int) for UI
+    progress bars. Called once per processed timepoint.
     """
     if len(files) < 2:
         raise ValueError("At least two files are required: one reference (I0) and one measured spectrum.")
@@ -214,11 +245,15 @@ def run_time_series_ml_from_intensity_files(
     ref_name, ref_bytes = ordered[0]
     ref_spectrum = load_spectrum(ref_bytes)
     cross_data = load_cross_sections_from_dir(cross_section_dir)
+    # Load the model once — without this, a 343-frame series spends ~5 minutes
+    # re-loading the same 170 MB checkpoint over and over.
+    model = load_ml_model(model_file, exp_id)
 
     summary_rows: list[dict[str, float]] = []
     labels: list[str] = []
     single_results: list[MLResult] = []
 
+    total = len(ordered) - 1
     for fallback_index, (name, data) in enumerate(ordered[1:], start=1):
         time_value = _extract_numeric_suffix(name)
         if time_value is None:
@@ -232,10 +267,10 @@ def run_time_series_ml_from_intensity_files(
             wave_high=wave_high,
         )
 
-        ml_result = run_ml_inference(
+        ml_result = _run_ml_inference_with_model(
+            model=model,
             absorbance=optical_depth,
             cross_sections=cross_data,
-            model_file=model_file,
             exp_id=exp_id,
             path_length_cm=float(path_length_cm),
         )
@@ -247,6 +282,12 @@ def run_time_series_ml_from_intensity_files(
         summary_rows.append(row)
         labels.append(name)
         single_results.append(ml_result)
+
+        if progress_callback is not None:
+            try:
+                progress_callback(fallback_index, total)
+            except Exception:
+                pass
 
     summary_table = (
         pd.DataFrame(summary_rows).sort_values("Time (s)").reset_index(drop=True)
