@@ -1,9 +1,14 @@
-streamlit>=1.44
+# Streamlit Cloud installs from PyPI by default. The CPU-only torch wheel is
+# significantly smaller (~200 MB vs ~2 GB) and fits well within the deploy
+# size budget. Locally, plain `pip install torch` works just as well.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+streamlit>=1.44,<2
 numpy>=1.26
 pandas>=2.2
 scikit-learn>=1.4
 plotly>=5.20
-torch>=2.2
-torchvision>=0.17
+torch>=2.2,<3
+torchvision>=0.17,<1
 pillow>=10.2
 openpyxl>=3.1.0
