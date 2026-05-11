@@ -1,0 +1,1183 @@
+from __future__ import annotations
+
+import base64
+import hmac
+import textwrap
+from io import BytesIO
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
+
+from oas_web.analysis import (
+    DEFAULT_MAX_REPEAT,
+    DEFAULT_MIN_FIT_FRACTION,
+    DEFAULT_OD_AVG_COEFF,
+    DEFAULT_OD_CLIP_THRESHOLD,
+    FitConfig,
+    build_continual_learning_frame_single,
+    build_continual_learning_frame_timeseries,
+    compute_optical_depth_from_reference,
+    discover_preferred_cross_section_dir,
+    load_cross_sections_from_dir,
+    load_spectrum,
+    prepare_download_frame,
+    run_single_from_intensity_files,
+    run_time_series_from_intensity_files,
+)
+from oas_web.ml import (
+    build_continual_learning_frame_ml_single,
+    build_continual_learning_frame_ml_timeseries,
+    run_ml_inference,
+    run_time_series_ml_from_intensity_files,
+)
+from oas_web.plots import (
+    make_intensity_preview,
+    make_overlay_figure,
+    make_reconstruction_heatmap,
+    make_species_bar,
+    make_timeseries_trend,
+)
+
+
+ROOT = Path(__file__).resolve().parent
+ML_DEFAULT_PTH = ROOT / "machine_learning" / "exp_4_epoch_3000.pth"
+HERO_IMAGE_PATH = ROOT / "assets" / "spectroscopy.png"
+
+st.set_page_config(
+    page_title="OAS Spectrum Studio",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def html(body: str) -> None:
+    """Inject raw HTML through st.markdown after stripping common indent.
+
+    Streamlit's markdown parser treats 4+ space indents as code blocks, so any
+    HTML pasted from indented Python source needs to be dedented first.
+    """
+    st.markdown(textwrap.dedent(body), unsafe_allow_html=True)
+
+
+def _encode_image_b64(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return base64.b64encode(path.read_bytes()).decode("ascii")
+
+
+HERO_IMAGE_B64 = _encode_image_b64(HERO_IMAGE_PATH)
+
+
+def dataframe_to_excel_bytes(frame: pd.DataFrame, sheet_name: str = "OAS summary") -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        frame.to_excel(writer, index=False, sheet_name=sheet_name)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Styles
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def inject_styles() -> None:
+    html("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --accent: #f97316;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --soft: #f1f5f9;
+        --border: rgba(15, 23, 42, 0.08);
+        --border-strong: rgba(15, 23, 42, 0.14);
+        --shadow: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px rgba(15,23,42,.06);
+        --shadow-lg: 0 4px 12px rgba(15,23,42,.06), 0 24px 48px rgba(15,23,42,.08);
+    }
+
+    /* Body-level font — do NOT cover icon spans */
+    html, body, .stApp { font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+
+    .stApp {
+        background:
+            radial-gradient(1200px 600px at 8% -10%, rgba(99,102,241,.10), transparent 60%),
+            radial-gradient(900px 500px at 100% 0%, rgba(249,115,22,.08), transparent 60%),
+            linear-gradient(180deg, #fafafa 0%, #f5f7fb 100%);
+    }
+    header[data-testid="stHeader"] { background: transparent; }
+    [data-testid="stToolbar"] { display: none; }
+
+    .block-container {
+        padding-top: 1.4rem;
+        padding-bottom: 2rem;
+        padding-left: 1.6rem;
+        padding-right: 1.6rem;
+        max-width: 1480px;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+        border-right: 1px solid var(--border);
+    }
+
+    /* Hero */
+    .hero {
+        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 45%, #ec4899 100%);
+        border-radius: 20px;
+        padding: 1.4rem 1.6rem;
+        margin-bottom: 1rem;
+        box-shadow: var(--shadow-lg);
+        position: relative;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        gap: 1.4rem;
+    }
+    .hero::before {
+        content: "";
+        position: absolute; right: -80px; top: -80px;
+        width: 280px; height: 280px;
+        background: radial-gradient(circle, rgba(255,255,255,.18), transparent 70%);
+        filter: blur(8px);
+        pointer-events: none;
+    }
+    .hero-text { flex: 1.2; min-width: 280px; position: relative; z-index: 1; }
+    .hero-pill {
+        display: inline-block;
+        background: rgba(255,255,255,0.18);
+        border: 1px solid rgba(255,255,255,0.30);
+        border-radius: 999px;
+        padding: 3px 11px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: white;
+        margin-bottom: 0.45rem;
+    }
+    .hero-text h1 {
+        font-size: 1.6rem !important;
+        font-weight: 800 !important;
+        margin: 0 0 0.25rem 0 !important;
+        color: white !important;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+    }
+    .hero-text p {
+        margin: 0 !important;
+        opacity: 0.94;
+        font-size: 0.94rem;
+        font-weight: 500;
+        color: white !important;
+        max-width: 56ch;
+    }
+    .hero-image {
+        flex: 1;
+        max-width: 380px;
+        position: relative;
+        z-index: 1;
+    }
+    .hero-image img {
+        width: 100%;
+        height: auto;
+        border-radius: 14px;
+        background: rgba(255,255,255,0.96);
+        padding: 6px;
+        box-shadow: 0 6px 18px rgba(15,23,42,.18);
+    }
+    @media (max-width: 880px) {
+        .hero { flex-direction: column; align-items: stretch; }
+        .hero-image { max-width: 100%; }
+    }
+
+    /* Native container as "card" */
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        background: white;
+        border: 1px solid var(--border) !important;
+        border-radius: 16px !important;
+        padding: 1.1rem 1.2rem !important;
+        box-shadow: var(--shadow);
+        margin-bottom: 0.9rem;
+    }
+
+    /* Step header inside cards */
+    .step-head { display: flex; align-items: center; gap: .6rem; margin: 0 0 .9rem 0; }
+    .step-num {
+        width: 28px; height: 28px; border-radius: 8px;
+        background: var(--ink); color: white;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: .85rem;
+    }
+    .step-title { font-weight: 700; font-size: 1.02rem; color: var(--ink); letter-spacing: -0.005em; }
+
+    /* Metric cards */
+    [data-testid="stMetric"] {
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: .75rem .9rem;
+        box-shadow: var(--shadow);
+    }
+    [data-testid="stMetricLabel"] {
+        font-weight: 600 !important;
+        font-size: .76rem !important;
+        color: var(--muted) !important;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    [data-testid="stMetricValue"] {
+        font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+        font-weight: 600 !important;
+        font-size: 1.15rem !important;
+        color: var(--ink) !important;
+    }
+
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        background: white;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 4px;
+        margin-bottom: .8rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background: transparent;
+        border-radius: 8px !important;
+        padding: 0.5rem 0.95rem !important;
+        font-weight: 600 !important;
+        color: var(--muted) !important;
+        border: none !important;
+    }
+    .stTabs [aria-selected="true"] {
+        background: var(--ink) !important;
+    }
+    .stTabs [aria-selected="true"] * { color: white !important; }
+
+    /* Buttons — strengthen text color so labels are always visible */
+    .stButton > button,
+    .stButton > button > div,
+    .stButton > button p {
+        color: white !important;
+    }
+    .stButton > button {
+        background: var(--ink) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        font-weight: 700 !important;
+        padding: 0.55rem 1rem !important;
+        transition: transform .08s ease, box-shadow .16s ease;
+        box-shadow: 0 1px 2px rgba(15,23,42,.08), 0 4px 12px rgba(15,23,42,.08);
+    }
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(15,23,42,.12), 0 16px 32px rgba(15,23,42,.14);
+    }
+    .stButton > button[kind="secondary"],
+    .stButton > button[kind="secondary"] > div,
+    .stButton > button[kind="secondary"] p {
+        background: white !important;
+        color: var(--ink) !important;
+        border: 1px solid var(--border-strong) !important;
+    }
+    .stDownloadButton > button,
+    .stDownloadButton > button > div,
+    .stDownloadButton > button p {
+        background: white !important;
+        color: var(--ink) !important;
+        border: 1px solid var(--border-strong) !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+    }
+    .stDownloadButton > button:hover { border-color: var(--ink) !important; }
+
+    /* File uploader */
+    [data-testid="stFileUploader"] section {
+        background: #fafbff;
+        border: 1.5px dashed rgba(99,102,241,.30) !important;
+        border-radius: 12px;
+    }
+    [data-testid="stFileUploader"] section:hover {
+        background: #f5f7ff;
+        border-color: rgba(99,102,241,.55) !important;
+    }
+
+    /* Number input */
+    [data-testid="stNumberInput"] input {
+        border-radius: 10px !important;
+        border: 1px solid var(--border-strong) !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 600;
+    }
+
+    /* Dataframe */
+    [data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+    }
+
+    /* Section chip */
+    .chip-row { display: flex; gap: .4rem; flex-wrap: wrap; margin-top: .35rem; }
+    .chip {
+        font-size: 0.72rem; font-weight: 600;
+        background: var(--soft); color: var(--muted);
+        border: 1px solid var(--border);
+        border-radius: 999px; padding: 3px 10px;
+    }
+    .chip-accent { background: rgba(99,102,241,.10); color: var(--primary-dark); border-color: rgba(99,102,241,.25); }
+
+    /* Consent panel for ML */
+    .consent-note {
+        background: linear-gradient(180deg, #f5f3ff 0%, #fdf4ff 100%);
+        border: 1px solid rgba(168,85,247,.18);
+        color: #4c1d95;
+        border-radius: 12px;
+        padding: .65rem .85rem;
+        font-size: 0.85rem;
+        margin-top: .55rem;
+        line-height: 1.45;
+    }
+    .consent-note strong { color: #312e81; }
+    </style>
+    """)
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# UI primitives
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def render_hero(title: str, subtitle: str, badge: str) -> None:
+    img_html = ""
+    if HERO_IMAGE_B64:
+        img_html = (
+            f'<div class="hero-image">'
+            f'<img alt="OAS spectroscopy" '
+            f'src="data:image/png;base64,{HERO_IMAGE_B64}" />'
+            f'</div>'
+        )
+    html(f"""
+    <div class="hero">
+        <div class="hero-text">
+            <span class="hero-pill">{badge}</span>
+            <h1>{title}</h1>
+            <p>{subtitle}</p>
+        </div>
+        {img_html}
+    </div>
+    """)
+
+
+def render_step(num: int, title: str) -> None:
+    html(f"""
+    <div class="step-head">
+        <span class="step-num">{num}</span>
+        <span class="step-title">{title}</span>
+    </div>
+    """)
+
+
+def render_metric_row(metrics: dict[str, float]) -> None:
+    cols = st.columns(4)
+    cols[0].metric("R²", f"{metrics.get('r2', float('nan')):.4f}")
+    cols[1].metric("RMSE", f"{metrics.get('rmse', float('nan')):.3e}")
+    cols[2].metric("MAE", f"{metrics.get('mae', float('nan')):.3e}")
+    cols[3].metric("MAPE", f"{metrics.get('mape', float('nan')):.2f}%")
+
+
+def render_chemical_table(species: list[str], values: np.ndarray) -> None:
+    detected = [bool(v > 0) for v in values]
+    frame = pd.DataFrame({
+        "Species": species,
+        "Detected": ["Yes" if d else "No" for d in detected],
+        "Number density": [float(v) for v in values],
+        "Unit": ["molec/cm³"] * len(species),
+    })
+    st.dataframe(
+        frame,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Species": st.column_config.TextColumn("Species", width="small"),
+            "Detected": st.column_config.TextColumn("Detected", width="small"),
+            "Number density": st.column_config.NumberColumn(
+                "Number density (molec/cm³)",
+                format="%.3e",
+            ),
+            "Unit": st.column_config.TextColumn("Unit", width="small"),
+        },
+    )
+
+
+def render_diagnostics(
+    repeat_count: int | None = None,
+    clip_applied: bool | None = None,
+    hono_exceed: bool | None = None,
+    excluded_species: list[str] | None = None,
+) -> None:
+    chips = []
+    if repeat_count is not None:
+        chips.append(f"<span class='chip'>Refit iterations: {repeat_count}</span>")
+    if clip_applied is not None:
+        chips.append(
+            f"<span class='chip {'chip-accent' if clip_applied else ''}'>"
+            f"Positive clip: {'on' if clip_applied else 'off'}</span>"
+        )
+    if hono_exceed is not None:
+        chips.append(
+            f"<span class='chip {'chip-accent' if hono_exceed else ''}'>"
+            f"HONO exceed: {'yes' if hono_exceed else 'no'}</span>"
+        )
+    if excluded_species:
+        chips.append(
+            f"<span class='chip chip-accent'>Suppressed: {', '.join(excluded_species)}</span>"
+        )
+    if chips:
+        html(f"<div class='chip-row'>{''.join(chips)}</div>")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Sidebar
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def render_sidebar() -> tuple[str, FitConfig]:
+    with st.sidebar:
+        html("""
+        <div style="margin: 0 0 .9rem 0;">
+            <div style="font-weight:800; font-size:1.15rem; letter-spacing:-0.01em;">🔬 OAS Studio</div>
+            <div style="color:#64748b; font-size:.82rem; font-weight:500;">Optical Absorption Spectroscopy</div>
+        </div>
+        """)
+
+        analysis_type = st.radio(
+            "Analysis mode",
+            options=["Single OAS analysis", "Time-series OAS analysis"],
+            index=0,
+            key="sidebar_analysis_type",
+        )
+
+        st.markdown("---")
+        with st.expander("Advanced fit configuration", expanded=False):
+            st.caption(
+                "Tune the heuristics that drive O₃ clipping and the iterative refit. "
+                "These apply to the linear regression path."
+            )
+            min_fit_fraction = st.slider(
+                "Min fit fraction", 0.0, 0.5, float(DEFAULT_MIN_FIT_FRACTION), 0.01,
+                help="Minimum ratio of fit points to total points. Below this, the fit returns zeros.",
+            )
+            od_avg_coeff = st.slider(
+                "False-positive suppression coefficient", 0.5, 4.0,
+                float(DEFAULT_OD_AVG_COEFF), 0.05,
+                help=("In the 350–370 nm window, drop a species column whose reconstructed average "
+                      "exceeds this multiple of the total OD average."),
+            )
+            od_clip_threshold = st.slider(
+                "OD clipping threshold", 0.05, 0.6,
+                float(DEFAULT_OD_CLIP_THRESHOLD), 0.01,
+                help="Noise threshold for O₃ peak based positive clipping.",
+            )
+            max_repeat = st.slider(
+                "Max refit iterations", 0, 10, int(DEFAULT_MAX_REPEAT), 1,
+            )
+
+        config = FitConfig(
+            od_clip_threshold=float(od_clip_threshold),
+            od_avg_coeff=float(od_avg_coeff),
+            min_fit_fraction=float(min_fit_fraction),
+            max_repeat=int(max_repeat),
+        )
+
+        st.markdown("---")
+        st.caption(
+            f"**ML checkpoint** &middot; `{ML_DEFAULT_PTH.name}` "
+            f"{'✓ loaded' if ML_DEFAULT_PTH.exists() else '⚠ not found'}"
+        )
+        st.caption("**Cross-sections** &middot; Cross_sections_modified (auto-detected)")
+
+    return analysis_type, config
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Method picker (shared)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def render_method_picker(state_key: str) -> str:
+    """Page-level method picker; defaults to Linear regression."""
+    if state_key not in st.session_state:
+        st.session_state[state_key] = "Linear regression"
+    method = st.radio(
+        "Fitting method",
+        options=["Linear regression", "Machine learning"],
+        index=["Linear regression", "Machine learning"].index(st.session_state[state_key]),
+        horizontal=True,
+        key=state_key,
+        help=("Linear regression: positive NNLS fit with O₃ clipping and iterative refit. "
+              "Machine learning: ResNet101 CNN trained on simulated OAS spectra."),
+    )
+    return method
+
+
+def render_consent_block(method: str, key: str) -> bool:
+    """Single CL consent checkbox used by both modes; the wording adapts to method."""
+    if method == "Machine learning":
+        label = "Contribute this analysis to the global model (continual learning)"
+        tooltip = (
+            "When checked, your spectrum and species predictions become a training "
+            "sample for the next model release. The CSV stays on your machine — submit "
+            "it later via the upload portal we provide."
+        )
+    else:
+        label = "Save reconstruction as continual-learning sample (CSV)"
+        tooltip = (
+            "Saves wavelength-by-wavelength measured/reconstructed/per-species OD "
+            "with metadata, suitable for downstream ML fine-tuning."
+        )
+    consent = st.checkbox(label, value=False, key=key, help=tooltip)
+    if method == "Machine learning" and consent:
+        html("""
+        <div class="consent-note">
+        <strong>Thank you.</strong> Your reconstruction will be exported as a CSV
+        sample. By including your data in the global continual-learning corpus you
+        help improve OAS analysis for the entire community. Identifying metadata is
+        limited to the original filenames you provide.
+        </div>
+        """)
+    return consent
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Run helpers (method-agnostic adapters)
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def run_single_analysis(
+    method: str,
+    ref_bytes: bytes,
+    meas_bytes: bytes,
+    cross_dir: str,
+    path_length_cm: float,
+    config: FitConfig,
+) -> dict:
+    """Return a dict with the canonical result shape, regardless of method."""
+    if method == "Linear regression":
+        result = run_single_from_intensity_files(
+            reference_file=ref_bytes,
+            measured_file=meas_bytes,
+            cross_section_dir=cross_dir,
+            path_length_cm=path_length_cm,
+            config=config,
+        )
+        return {
+            "kind": "linear",
+            "species": list(result.regression.species),
+            "number_densities": np.asarray(result.regression.number_densities, dtype=float),
+            "wavelengths": np.asarray(result.wavelengths, dtype=float),
+            "measured": np.asarray(result.measured_od, dtype=float),
+            "reconstructed": np.asarray(result.regression.reconstructed, dtype=float),
+            "per_species_od": np.asarray(result.regression.per_species_od, dtype=float),
+            "metrics": dict(result.regression.metrics),
+            "diagnostics": {
+                "repeat_count": int(result.regression.repeat_count),
+                "clip_applied": bool(result.regression.clip_applied),
+                "hono_exceed": bool(result.regression.hono_exceed),
+                "excluded_species": list(result.regression.excluded_species),
+            },
+            "_native": result,
+        }
+
+    if not ML_DEFAULT_PTH.exists():
+        raise FileNotFoundError("Default ML checkpoint missing at machine_learning/exp_4_epoch_3000.pth")
+
+    ref_spectrum = load_spectrum(ref_bytes)
+    meas_spectrum = load_spectrum(meas_bytes)
+    optical_depth = compute_optical_depth_from_reference(
+        reference_spectrum=ref_spectrum,
+        measured_spectrum=meas_spectrum,
+        wave_low=210.0,
+        wave_high=400.0,
+    )
+    cross_data = load_cross_sections_from_dir(cross_dir)
+    ml_result = run_ml_inference(
+        absorbance=optical_depth,
+        cross_sections=cross_data,
+        model_file=ML_DEFAULT_PTH,
+        exp_id=4,
+        path_length_cm=path_length_cm,
+    )
+    return {
+        "kind": "ml",
+        "species": list(ml_result.species),
+        "number_densities": np.asarray(ml_result.number_densities, dtype=float),
+        "wavelengths": np.asarray(ml_result.wavelengths, dtype=float),
+        "measured": np.asarray(ml_result.measured_absorbance, dtype=float),
+        "reconstructed": np.asarray(ml_result.reconstructed, dtype=float),
+        "per_species_od": np.asarray(ml_result.per_species_od, dtype=float),
+        "metrics": dict(ml_result.metrics),
+        "diagnostics": None,
+        "_native": ml_result,
+    }
+
+
+def run_timeseries_analysis(
+    method: str,
+    file_items: list[tuple[str, bytes]],
+    cross_dir: str,
+    path_length_cm: float,
+    config: FitConfig,
+) -> dict:
+    if method == "Linear regression":
+        result = run_time_series_from_intensity_files(
+            files=file_items,
+            cross_section_dir=cross_dir,
+            path_length_cm=path_length_cm,
+            config=config,
+        )
+        return {
+            "kind": "linear",
+            "summary_table": result.summary_table,
+            "labels": list(result.labels),
+            "single_results": result.single_results,
+            "_native": result,
+        }
+
+    if not ML_DEFAULT_PTH.exists():
+        raise FileNotFoundError("Default ML checkpoint missing at machine_learning/exp_4_epoch_3000.pth")
+
+    ts_ml = run_time_series_ml_from_intensity_files(
+        files=file_items,
+        cross_section_dir=cross_dir,
+        model_file=ML_DEFAULT_PTH,
+        exp_id=4,
+        path_length_cm=path_length_cm,
+    )
+    return {
+        "kind": "ml",
+        "summary_table": ts_ml.summary_table,
+        "labels": list(ts_ml.labels),
+        "single_results": ts_ml.single_results,
+        "_native": ts_ml,
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Single page
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def render_single_page(selected_cross: str, config: FitConfig) -> None:
+    method = render_method_picker("single_method")
+
+    render_hero(
+        title="Single OAS analysis",
+        subtitle=("Upload reference I₀ and measured It spectra. The app computes optical depth, "
+                  "estimates species number densities, and validates the reconstruction."),
+        badge=f"Single · {method}",
+    )
+
+    # ── Input card ─────────────────────────────────────────────
+    with st.container(border=True):
+        render_step(1, "Spectrum inputs")
+
+        col_a, col_b = st.columns(2)
+        with col_a:
+            ref_file = st.file_uploader(
+                "Reference spectrum I₀  (lowest-suffix file)",
+                type=["txt", "csv", "dat"],
+                key="single_ref",
+            )
+        with col_b:
+            meas_file = st.file_uploader(
+                "Measured spectrum It  (target time file)",
+                type=["txt", "csv", "dat"],
+                key="single_meas",
+            )
+
+        cfg_col_a, cfg_col_b = st.columns([1.4, 1.6])
+        with cfg_col_a:
+            path_length_cm = st.number_input(
+                "Absorption path length (cm)",
+                min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
+                key="single_path_length",
+            )
+        with cfg_col_b:
+            cl_enabled = render_consent_block(method=method, key="single_cl_consent")
+
+        run_label = ("Run linear regression analysis"
+                     if method == "Linear regression"
+                     else "Run machine learning analysis")
+        run_clicked = st.button(run_label, type="primary", key="single_run_btn",
+                                use_container_width=True)
+
+        # Always show preview if both files are uploaded — same UI for LR and ML.
+        if ref_file and meas_file:
+            try:
+                ref_spectrum = load_spectrum(ref_file.getvalue())
+                meas_spectrum = load_spectrum(meas_file.getvalue())
+                ref_on_meas = np.interp(
+                    meas_spectrum.wavelengths,
+                    ref_spectrum.wavelengths,
+                    ref_spectrum.values,
+                    left=np.nan, right=np.nan,
+                )
+                mask = np.isfinite(ref_on_meas) & np.isfinite(meas_spectrum.values)
+                st.plotly_chart(
+                    make_intensity_preview(
+                        wavelengths=meas_spectrum.wavelengths[mask],
+                        reference=ref_on_meas[mask],
+                        measured=meas_spectrum.values[mask],
+                        title="Uploaded spectra preview",
+                    ),
+                    use_container_width=True,
+                )
+            except Exception as exc:
+                st.warning(f"Could not preview the spectra: {exc}")
+        else:
+            st.info("Upload both I₀ and It files, then click *Run* to compute the reconstruction.")
+
+    # ── Run handler ────────────────────────────────────────────
+    if run_clicked:
+        if ref_file is None or meas_file is None:
+            st.error("Both I₀ and It files are required before running.")
+        else:
+            try:
+                result_payload = run_single_analysis(
+                    method=method,
+                    ref_bytes=ref_file.getvalue(),
+                    meas_bytes=meas_file.getvalue(),
+                    cross_dir=selected_cross,
+                    path_length_cm=float(path_length_cm),
+                    config=config,
+                )
+                st.session_state["single_result"] = result_payload
+                st.session_state["single_inputs"] = {
+                    "ref": ref_file.name,
+                    "meas": meas_file.name,
+                    "path_length": float(path_length_cm),
+                    "method": method,
+                    "cl_consent": bool(cl_enabled),
+                }
+            except Exception as exc:
+                st.error(f"Analysis failed: {exc}")
+                st.session_state.pop("single_result", None)
+
+    # ── Result card ────────────────────────────────────────────
+    result = st.session_state.get("single_result")
+    inputs = st.session_state.get("single_inputs", {})
+    with st.container(border=True):
+        render_step(2, "Results")
+        if result is None:
+            st.info("Results appear here once an analysis run completes.")
+            return
+
+        # Don't show stale ML results if user just switched to LR (and vice versa).
+        if inputs.get("method") and inputs["method"] != method:
+            st.info(f"The current result was produced by *{inputs['method']}*. Re-run to refresh.")
+
+        render_metric_row(result["metrics"])
+
+        tab_extract, tab_validate, tab_map, tab_downloads = st.tabs(
+            ["Chemical extraction", "Validation overlay", "Spectral map", "Downloads"]
+        )
+
+        with tab_extract:
+            c1, c2 = st.columns([1.05, 1.0])
+            with c1:
+                render_chemical_table(result["species"], result["number_densities"])
+                if result["diagnostics"]:
+                    render_diagnostics(**result["diagnostics"])
+            with c2:
+                st.plotly_chart(
+                    make_species_bar(result["species"], result["number_densities"]),
+                    use_container_width=True,
+                )
+
+        with tab_validate:
+            per_species_frame = pd.DataFrame({"wavelength": result["wavelengths"]})
+            for idx, name in enumerate(result["species"]):
+                per_species_frame[name] = result["per_species_od"][:, idx]
+            st.plotly_chart(
+                make_overlay_figure(
+                    wavelengths=result["wavelengths"],
+                    measured=result["measured"],
+                    reconstructed=result["reconstructed"],
+                    species_frame=per_species_frame,
+                    title="Measured vs reconstructed OD",
+                ),
+                use_container_width=True,
+            )
+            st.caption("Per-species traces are hidden by default — click their names in the legend to toggle.")
+
+        with tab_map:
+            st.plotly_chart(
+                make_reconstruction_heatmap(
+                    result["wavelengths"], result["measured"], result["reconstructed"]
+                ),
+                use_container_width=True,
+            )
+
+        with tab_downloads:
+            recon_frame = prepare_download_frame(
+                wavelengths=result["wavelengths"],
+                measured=result["measured"],
+                reconstructed=result["reconstructed"],
+                species=result["species"],
+                per_species_od=result["per_species_od"],
+            )
+            st.download_button(
+                "Download reconstruction (CSV)",
+                data=recon_frame.to_csv(index=False).encode("utf-8"),
+                file_name="oas_reconstruction.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            if inputs.get("cl_consent"):
+                if result["kind"] == "linear":
+                    cl_frame = build_continual_learning_frame_single(
+                        result=result["_native"],
+                        path_length_cm=float(inputs.get("path_length", 15.0)),
+                        reference_file=str(inputs.get("ref", "")),
+                        measured_file=str(inputs.get("meas", "")),
+                    )
+                    cl_name = "oas_cl_sample_linear.csv"
+                else:
+                    native = result["_native"]
+                    cl_frame = build_continual_learning_frame_ml_single(
+                        ml_result=native,
+                        wavelengths=native.wavelengths,
+                        measured_absorbance=native.measured_absorbance,
+                        path_length_cm=float(inputs.get("path_length", 15.0)),
+                        reference_file=str(inputs.get("ref", "")),
+                        measured_file=str(inputs.get("meas", "")),
+                    )
+                    cl_name = "oas_cl_sample_ml.csv"
+                st.download_button(
+                    "Download continual-learning sample (CSV)",
+                    data=cl_frame.to_csv(index=False).encode("utf-8"),
+                    file_name=cl_name,
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+            else:
+                st.caption("Enable the *continual-learning* checkbox above to unlock the CL export.")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Time-series page
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
+    method = render_method_picker("ts_method")
+
+    render_hero(
+        title="Time-series OAS analysis",
+        subtitle=("Upload a sequence of spectra (I₀ + measurements). The file with the lowest "
+                  "numeric suffix is treated as I₀ and the rest are processed in order."),
+        badge=f"Time-series · {method}",
+    )
+
+    with st.container(border=True):
+        render_step(1, "Time-series inputs")
+
+        uploads = st.file_uploader(
+            "Upload spectra (I₀ and subsequent timepoints)",
+            type=["csv", "txt", "dat"],
+            accept_multiple_files=True,
+            key="ts_uploads",
+        )
+
+        cfg_a, cfg_b = st.columns([1.4, 1.6])
+        with cfg_a:
+            path_length_cm = st.number_input(
+                "Absorption path length (cm)",
+                min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
+                key="ts_path_length",
+            )
+        with cfg_b:
+            cl_enabled = render_consent_block(method=method, key="ts_cl_consent")
+
+        run_label = ("Run linear regression analysis"
+                     if method == "Linear regression"
+                     else "Run machine learning analysis")
+        run_clicked = st.button(run_label, type="primary", key="ts_run_btn",
+                                use_container_width=True)
+
+        if uploads:
+            st.caption(f"📁 {len(uploads)} files loaded.")
+
+    if run_clicked:
+        if not uploads or len(uploads) < 2:
+            st.error("Upload at least two files (I₀ + one measurement).")
+        else:
+            file_items = [(u.name, u.getvalue()) for u in uploads]
+            try:
+                ts_payload = run_timeseries_analysis(
+                    method=method,
+                    file_items=file_items,
+                    cross_dir=selected_cross,
+                    path_length_cm=float(path_length_cm),
+                    config=config,
+                )
+                st.session_state["ts_result"] = ts_payload
+                st.session_state["ts_inputs"] = {
+                    "path_length": float(path_length_cm),
+                    "method": method,
+                    "cl_consent": bool(cl_enabled),
+                }
+            except Exception as exc:
+                st.error(f"Time-series analysis failed: {exc}")
+                st.session_state.pop("ts_result", None)
+
+    ts_payload = st.session_state.get("ts_result")
+    ts_inputs = st.session_state.get("ts_inputs", {})
+    with st.container(border=True):
+        render_step(2, "Results")
+        if ts_payload is None:
+            st.info("Run the analysis to see the trend, summary, and per-frame validation.")
+            return
+        if ts_inputs.get("method") and ts_inputs["method"] != method:
+            st.info(f"The current result was produced by *{ts_inputs['method']}*. Re-run to refresh.")
+
+        summary_table = ts_payload["summary_table"]
+        labels = ts_payload["labels"]
+        species_cols = [c for c in summary_table.columns if c != "Time (s)"]
+        detected = [sp for sp in species_cols if summary_table[sp].astype(float).abs().sum() > 0]
+
+        mcols = st.columns(4)
+        mcols[0].metric("Timepoints", len(summary_table))
+        mcols[1].metric("Species tracked", len(species_cols))
+        mcols[2].metric("Detected (any t)", len(detected))
+        mcols[3].metric("Method", method.split()[0])
+
+        tab_trend, tab_summary, tab_validate, tab_downloads = st.tabs(
+            ["Trend", "Summary table", "Per-frame validation", "Downloads"]
+        )
+
+        with tab_trend:
+            st.plotly_chart(make_timeseries_trend(summary_table), use_container_width=True)
+            st.caption("Y-axis is log-scaled. Zero values are hidden by Plotly; this is expected.")
+
+        with tab_summary:
+            display_table = summary_table.copy()
+            for col in species_cols:
+                display_table[col] = display_table[col].map(lambda v: f"{v:.3e}")
+            st.dataframe(display_table, use_container_width=True, hide_index=True, height=380)
+
+        with tab_validate:
+            if not labels:
+                st.info("No timepoints to validate.")
+            else:
+                sel = st.selectbox(
+                    "Pick a timepoint",
+                    options=list(range(len(labels))),
+                    format_func=lambda i: labels[i],
+                    key=f"ts_validation_sel_{method}",
+                )
+                if ts_payload["kind"] == "linear":
+                    s = ts_payload["single_results"][sel]
+                    wavelengths = s.wavelengths
+                    measured = s.measured_od
+                    reconstructed = s.regression.reconstructed
+                    metrics = s.regression.metrics
+                    per_species_od = s.regression.per_species_od
+                    species = s.regression.species
+                    diag = {
+                        "repeat_count": s.regression.repeat_count,
+                        "clip_applied": s.regression.clip_applied,
+                        "hono_exceed": s.regression.hono_exceed,
+                        "excluded_species": s.regression.excluded_species,
+                    }
+                else:
+                    m = ts_payload["single_results"][sel]
+                    wavelengths = m.wavelengths
+                    measured = m.measured_absorbance
+                    reconstructed = m.reconstructed
+                    metrics = m.metrics
+                    per_species_od = m.per_species_od
+                    species = m.species
+                    diag = None
+
+                render_metric_row(metrics)
+                per_species_frame = pd.DataFrame({"wavelength": wavelengths})
+                for idx, name in enumerate(species):
+                    per_species_frame[name] = per_species_od[:, idx]
+                st.plotly_chart(
+                    make_overlay_figure(
+                        wavelengths=wavelengths,
+                        measured=measured,
+                        reconstructed=reconstructed,
+                        species_frame=per_species_frame,
+                        title=f"Validation · {labels[sel]}",
+                    ),
+                    use_container_width=True,
+                )
+                if diag:
+                    render_diagnostics(**diag)
+
+        with tab_downloads:
+            st.download_button(
+                "Download summary (CSV)",
+                data=summary_table.to_csv(index=False).encode("utf-8"),
+                file_name="time_series_oas_summary.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+            st.download_button(
+                "Download summary (Excel)",
+                data=dataframe_to_excel_bytes(summary_table, sheet_name="Time-series OAS"),
+                file_name="time_series_oas_summary.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+            if ts_inputs.get("cl_consent"):
+                if ts_payload["kind"] == "linear":
+                    cl_frame = build_continual_learning_frame_timeseries(
+                        result=ts_payload["_native"],
+                        path_length_cm=float(ts_inputs.get("path_length", 15.0)),
+                    )
+                    cl_name = "ts_cl_dataset_linear.csv"
+                else:
+                    cl_frame = build_continual_learning_frame_ml_timeseries(
+                        ts_result=ts_payload["_native"],
+                        path_length_cm=float(ts_inputs.get("path_length", 15.0)),
+                    )
+                    cl_name = "ts_cl_dataset_ml.csv"
+                if isinstance(cl_frame, pd.DataFrame) and not cl_frame.empty:
+                    st.download_button(
+                        "Download continual-learning dataset (CSV)",
+                        data=cl_frame.to_csv(index=False).encode("utf-8"),
+                        file_name=cl_name,
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("Continual-learning dataset is empty.")
+            else:
+                st.caption("Enable the *continual-learning* checkbox above to unlock the CL export.")
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Auth
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def require_login_if_enabled() -> None:
+    try:
+        auth = st.secrets.get("auth", {})
+    except StreamlitSecretNotFoundError:
+        auth = {}
+    if not bool(auth.get("enabled", False)):
+        return
+
+    if st.session_state.get("authenticated", False):
+        if st.sidebar.button("Sign out", use_container_width=True):
+            st.session_state.pop("authenticated", None)
+            st.rerun()
+        return
+
+    render_hero(
+        title="Sign in to OAS Studio",
+        subtitle="This deployment is access-controlled. Enter your credentials to continue.",
+        badge="Protected access",
+    )
+
+    users = auth.get("users", None)
+    single_username = str(auth.get("username", "")).strip()
+    single_password = str(auth.get("password", ""))
+
+    allowed_users: dict[str, str] = {}
+    if users is not None:
+        from collections.abc import Mapping
+        try:
+            if isinstance(users, Mapping):
+                allowed_users = {str(u).strip(): str(p) for u, p in users.items()}
+            else:
+                try:
+                    allowed_users = {str(u).strip(): str(p) for u, p in users.items()}  # type: ignore[attr-defined]
+                except Exception:
+                    allowed_users = {}
+        except Exception:
+            allowed_users = {}
+    if not allowed_users and single_username and single_password:
+        allowed_users = {single_username: single_password}
+    if not allowed_users:
+        st.error("Authentication is enabled, but no credentials are configured in `secrets.toml`.")
+        st.stop()
+
+    with st.form("login_form", clear_on_submit=False):
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Sign in", type="primary", use_container_width=True)
+
+    if submitted:
+        ok = any(
+            hmac.compare_digest(str(username).strip(), au)
+            and hmac.compare_digest(str(password), ap)
+            for au, ap in allowed_users.items()
+        )
+        if ok:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Invalid username or password.")
+    st.stop()
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Main
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def main() -> None:
+    inject_styles()
+    require_login_if_enabled()
+
+    analysis_type, config = render_sidebar()
+
+    selected_cross = discover_preferred_cross_section_dir(str(ROOT / "260429"))
+    if selected_cross is None:
+        render_hero(
+            title="Cross-section data missing",
+            subtitle="The expected `Cross_sections_modified` folder with 8 species was not found.",
+            badge="Configuration error",
+        )
+        st.error(
+            "Place the following files under `260429/.../Cross_sections_modified/` and reload:\n\n"
+            "- HONO_ordered_cross_section.txt\n"
+            "- HONO2_ordered_cross_section.txt\n"
+            "- N2O4_ordered_cross_section.txt\n"
+            "- N2O5_ordered_cross_section.txt\n"
+            "- NO_ordered_cross_section.txt\n"
+            "- NO2_ordered_cross_section.txt\n"
+            "- NO3_ordered_cross_section.txt\n"
+            "- O3_ordered_cross_section.txt"
+        )
+        return
+
+    if analysis_type == "Single OAS analysis":
+        render_single_page(selected_cross=str(selected_cross), config=config)
+    else:
+        render_timeseries_page(selected_cross=str(selected_cross), config=config)
+
+
+if __name__ == "__main__":
+    main()
