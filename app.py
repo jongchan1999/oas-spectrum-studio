@@ -36,7 +36,6 @@ from oas_web.ml import (
 from oas_web.plots import (
     make_intensity_preview,
     make_overlay_figure,
-    make_reconstruction_heatmap,
     make_species_bar,
     make_timeseries_trend,
 )
@@ -342,7 +341,26 @@ def inject_styles() -> None:
     }
     .chip-accent { background: rgba(99,102,241,.10); color: var(--primary-dark); border-color: rgba(99,102,241,.25); }
 
-    /* Consent panel for ML */
+    /* ML-only consent card (banner that sits above the Run button) */
+    .consent-card {
+        background: linear-gradient(135deg, #f5f3ff 0%, #fdf4ff 60%, #fef3c7 100%);
+        border: 1px solid rgba(168, 85, 247, 0.22);
+        border-radius: 14px;
+        padding: 0.85rem 1rem;
+        margin: .55rem 0 .65rem 0;
+        box-shadow: 0 1px 2px rgba(168,85,247,.05), 0 8px 20px rgba(168,85,247,.07);
+    }
+    .consent-card-title {
+        display: flex; align-items: center; gap: .5rem;
+        font-weight: 700; font-size: .98rem; color: #4c1d95;
+        margin-bottom: .25rem;
+    }
+    .consent-icon { font-size: 1.05rem; line-height: 1; }
+    .consent-card-body {
+        font-size: 0.85rem; line-height: 1.5;
+        color: #4c1d95; opacity: 0.88;
+    }
+
     .consent-note {
         background: linear-gradient(180deg, #f5f3ff 0%, #fdf4ff 100%);
         border: 1px solid rgba(168,85,247,.18);
@@ -537,31 +555,38 @@ def render_method_picker(state_key: str) -> str:
 
 
 def render_consent_block(method: str, key: str) -> bool:
-    """Single CL consent checkbox used by both modes; the wording adapts to method."""
-    if method == "Machine learning":
-        label = "Contribute this analysis to the global model (continual learning)"
-        tooltip = (
-            "When checked, your spectrum and species predictions become a training "
-            "sample for the next model release. The CSV stays on your machine — submit "
-            "it later via the upload portal we provide."
-        )
-    else:
-        label = "Save reconstruction as continual-learning sample (CSV)"
-        tooltip = (
-            "Saves wavelength-by-wavelength measured/reconstructed/per-species OD "
-            "with metadata, suitable for downstream ML fine-tuning."
-        )
-    consent = st.checkbox(label, value=False, key=key, help=tooltip)
-    if method == "Machine learning" and consent:
-        html("""
-        <div class="consent-note">
-        <strong>Thank you.</strong> Your reconstruction will be exported as a CSV
-        sample. By including your data in the global continual-learning corpus you
-        help improve OAS analysis for the entire community. Identifying metadata is
-        limited to the original filenames you provide.
+    """ML-only consent banner. Returns False for non-ML methods.
+
+    LR users get the regular reconstruction CSV from the Downloads tab — the
+    "continual learning" framing only applies to feeding new spectra back into
+    the ML training pool, so it would be confusing to expose it for LR.
+    """
+    if method != "Machine learning":
+        # Prevent stale state from leaking when the user toggles methods.
+        st.session_state.pop(key, None)
+        return False
+
+    html("""
+    <div class="consent-card">
+        <div class="consent-card-title">
+            <span class="consent-icon">🌐</span>
+            <span>Help improve the global model</span>
         </div>
-        """)
-    return consent
+        <div class="consent-card-body">
+            Opt in to add this analysis to the continual-learning corpus. Your
+            reconstruction is exported as a CSV training sample for the next
+            model release. Only the filenames you provided are kept as
+            metadata; nothing leaves your machine until you explicitly upload
+            the CSV via the submission portal.
+        </div>
+    </div>
+    """)
+    return st.checkbox(
+        "Yes, contribute this analysis to the global model",
+        value=False,
+        key=key,
+        help="Enables the continual-learning sample download in the Downloads tab.",
+    )
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -715,15 +740,13 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 key="single_meas",
             )
 
-        cfg_col_a, cfg_col_b = st.columns([1.4, 1.6])
-        with cfg_col_a:
-            path_length_cm = st.number_input(
-                "Absorption path length (cm)",
-                min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
-                key="single_path_length",
-            )
-        with cfg_col_b:
-            cl_enabled = render_consent_block(method=method, key="single_cl_consent")
+        path_length_cm = st.number_input(
+            "Absorption path length (cm)",
+            min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
+            key="single_path_length",
+        )
+
+        cl_enabled = render_consent_block(method=method, key="single_cl_consent")
 
         run_label = ("Run linear regression analysis"
                      if method == "Linear regression"
@@ -798,8 +821,8 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
 
         render_metric_row(result["metrics"])
 
-        tab_extract, tab_validate, tab_map, tab_downloads = st.tabs(
-            ["Chemical extraction", "Validation overlay", "Spectral map", "Downloads"]
+        tab_extract, tab_validate, tab_downloads = st.tabs(
+            ["Chemical extraction", "Validation overlay", "Downloads"]
         )
 
         with tab_extract:
@@ -828,14 +851,9 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 ),
                 use_container_width=True,
             )
-            st.caption("Per-species traces are hidden by default — click their names in the legend to toggle.")
-
-        with tab_map:
-            st.plotly_chart(
-                make_reconstruction_heatmap(
-                    result["wavelengths"], result["measured"], result["reconstructed"]
-                ),
-                use_container_width=True,
+            st.caption(
+                "Solid traces: measured vs full reconstruction. "
+                "Dashed traces: per-species contribution. Click a legend entry to toggle."
             )
 
         with tab_downloads:
@@ -910,15 +928,13 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
             key="ts_uploads",
         )
 
-        cfg_a, cfg_b = st.columns([1.4, 1.6])
-        with cfg_a:
-            path_length_cm = st.number_input(
-                "Absorption path length (cm)",
-                min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
-                key="ts_path_length",
-            )
-        with cfg_b:
-            cl_enabled = render_consent_block(method=method, key="ts_cl_consent")
+        path_length_cm = st.number_input(
+            "Absorption path length (cm)",
+            min_value=0.1, max_value=10000.0, value=15.0, step=0.1, format="%.2f",
+            key="ts_path_length",
+        )
+
+        cl_enabled = render_consent_block(method=method, key="ts_cl_consent")
 
         run_label = ("Run linear regression analysis"
                      if method == "Linear regression"

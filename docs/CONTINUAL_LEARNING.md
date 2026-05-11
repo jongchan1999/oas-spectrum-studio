@@ -222,12 +222,60 @@ Plot these over releases to make the continual-learning story visible.
 | 5 | Promotion rules + model URL config + auto-verify | 1-2 days |
 | 6 | Dashboards (Streamlit page for release metrics) | 1-2 days |
 
-## Open questions (for you to decide)
+## Decisions (locked v1)
 
-1. **Hosting**: Supabase or Cloud Run? Default: Supabase for v1.
-2. **Identity**: tie submissions to the existing username allow-list? Yes by
-   default — important for trust and revocation.
-3. **PII**: filenames the user uploaded sometimes contain experiment names.
-   Should we redact them server-side, or are they fine for the corpus?
-4. **Threshold for new release**: 50 samples per week (default) or more?
-5. **Roll-back**: keep last 3 model versions on disk by default — agree?
+Decided on the principle: *every choice should maximise the chance of a
+paper-grade demonstration that continual learning improves the model
+release-over-release, while keeping the contributor UX trivially simple and
+the data lineage auditable.*
+
+1. **Hosting → Supabase (free tier).**
+   Auth, Postgres for metadata, S3-compatible Storage for raw spectra. One
+   vendor, one place to revoke or export. Edge Functions handle the
+   submission endpoint — no separate FastAPI container needed for v1.
+   Migration to Cloud Run + GCS stays an option once we outgrow the free
+   quota or need per-upload ML pre-checks.
+
+2. **Identity → tied to the Streamlit allow-list username.**
+   Required for revocation, traceability, and credit attribution in the
+   paper acknowledgements. The username is hashed (SHA-256 + repo-side
+   salt) before being written into the corpus, so the public dataset never
+   exposes a real identifier.
+
+3. **PII / filenames → server-side hashed.**
+   Raw filenames frequently include experiment / facility names. The
+   submission endpoint replaces them with `sample_{sha256(name)[:12]}`. The
+   original mapping is kept in a private `metadata.filename_map` table
+   accessible only to the owner of the upload (RLS policy).
+
+4. **Release threshold → 100 accepted samples + 14 days minimum gap.**
+   Avoids retraining on tiny deltas (statistically noisy) while still
+   producing several releases per year. First 3 releases are manually
+   triggered so we can read each report; cron-promoted afterward.
+
+5. **Rollback → keep last 5 promoted model versions.**
+   170 MB × 5 ≈ 850 MB LFS, well within the Education tier. Each release
+   gets a tagged commit (`model-v3`, `model-v4`, …) and the live
+   `models/latest.json` flips between them. Pin to any earlier version by
+   changing one URL.
+
+### Paper-track addendum
+
+Every release publishes a one-page `releases/{vN}.md` with:
+- corpus deltas (new samples, species distribution, wavelength coverage diff)
+- per-species RMSE / bias deltas vs v(N-1) on (a) curated real holdout
+  (b) simulated baseline (c) golden hand-labelled set
+- per-user contribution table (hashed handles) so the paper can cite the
+  active contributor count over time
+
+These reports are the substrate of the "model improves with continual
+learning" narrative — once we have 3–4 releases stacked, the trend itself
+becomes the figure.
+
+### Open after v1
+
+Once the basic loop runs, revisit:
+- **Federated training** (no spectra leave the user's machine; only gradients
+  travel) — only if PII concerns escalate.
+- **Active learning** — rank uploads by current-model uncertainty and
+  prioritise the most informative ones for curation.

@@ -91,9 +91,9 @@ def make_overlay_figure(
                     y=species_frame[column],
                     mode="lines",
                     name=str(column),
-                    line={"color": color, "width": 1.2, "dash": "dot"},
-                    opacity=0.75,
-                    visible="legendonly",
+                    line={"color": color, "width": 1.6, "dash": "dash"},
+                    opacity=0.85,
+                    hovertemplate=f"<b>{column}</b><br>%{{x:.2f}} nm<br>%{{y:.3e}}<extra></extra>",
                 )
             )
 
