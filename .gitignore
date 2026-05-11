@@ -27,6 +27,13 @@ smoke_run_out.txt
 *.zip
 *.pptx
 
+# Supabase CLI workspace state (project-local, machine-specific).
+supabase/.temp/
+supabase/.branches/
+
+# Curation output (per-release packs are artifacts, not source).
+curated/
+
 # Ignore the 260429 measurement archive by default, but allow the 8 cross-section
 # text files the app needs at runtime. Patterns are walked downward — never
 # ignore a directory you want to descend into.
