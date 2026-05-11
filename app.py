@@ -452,9 +452,9 @@ def inject_styles() -> None:
     .consent-note strong { color: #312e81; }
 
     /* Sidebar brand + status panel */
-    .sidebar-brand { margin: 0 0 1.1rem 0; }
+    .sidebar-brand { margin: 0 0 1rem 0; }
     .brand-mark {
-        display: inline-flex; align-items: center; gap: .55rem;
+        display: flex; align-items: center; gap: .55rem;
         font-weight: 800; font-size: 1.22rem; color: var(--ink);
         letter-spacing: -0.018em;
     }
@@ -464,6 +464,7 @@ def inject_styles() -> None:
         background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
         color: white; font-size: 1.05rem;
         box-shadow: 0 1px 3px rgba(79,70,229,.30), 0 4px 10px rgba(79,70,229,.18);
+        flex-shrink: 0;
     }
     .brand-name {
         background: linear-gradient(90deg, #1e1b4b 0%, #6d28d9 100%);
@@ -471,19 +472,22 @@ def inject_styles() -> None:
         -webkit-text-fill-color: transparent;
     }
     .brand-tagline {
-        color: var(--muted); font-size: .8rem; font-weight: 500;
-        margin: .1rem 0 .35rem 0;
+        color: var(--muted); font-size: .78rem; font-weight: 500;
+        margin: .25rem 0 0 0;
     }
     .brand-version {
         display: inline-block;
         font-family: 'JetBrains Mono', ui-monospace, monospace;
-        font-size: 0.68rem;
+        font-size: 0.62rem;
         color: var(--primary-dark);
         background: rgba(99,102,241,.10);
         border: 1px solid rgba(99,102,241,.22);
         border-radius: 999px;
-        padding: 1px 8px;
+        padding: 1px 7px;
         letter-spacing: 0.04em;
+        margin-left: auto;        /* push to the right within .brand-mark */
+        align-self: center;
+        line-height: 1.5;
     }
 
     .sidebar-status {
@@ -661,9 +665,9 @@ def render_sidebar() -> tuple[str, FitConfig]:
             <div class="brand-mark">
                 <span class="brand-logo">⚛</span>
                 <span class="brand-name">OAS Studio</span>
+                <span class="brand-version">v1.0</span>
             </div>
             <div class="brand-tagline">Optical Absorption Spectroscopy</div>
-            <div class="brand-version">v1.0</div>
         </div>
         """)
 
