@@ -38,6 +38,11 @@ from oas_web.plots import (
     make_species_bar,
     make_timeseries_trend,
 )
+from oas_web.cl_submit import (
+    SubmissionError,
+    build_submission_payload,
+    submit_to_global_model,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -559,6 +564,92 @@ def inject_styles() -> None:
 
 
 # ────────────────────────────────────────────────────────────────────────────
+# Continual-learning submission config
+# ────────────────────────────────────────────────────────────────────────────
+
+
+def _get_cl_endpoint() -> tuple[str, str]:
+    """Return (endpoint_url, anon_key) from Streamlit secrets, or ('','')."""
+    try:
+        cl = st.secrets.get("cl", {})
+    except StreamlitSecretNotFoundError:
+        cl = {}
+    return (str(cl.get("endpoint", "")).strip(), str(cl.get("anon_key", "")).strip())
+
+
+def _current_username() -> str:
+    """Best-effort identifier: authenticated username if login is on, else 'anonymous'."""
+    return str(st.session_state.get("username") or "anonymous")
+
+
+def render_submit_to_global_model(
+    *,
+    method: str,                                    # "linear_regression" | "machine_learning"
+    path_length_cm: float,
+    reference_file: str,
+    measured_file: str,
+    wavelengths,
+    measured,
+    reconstructed,
+    species,
+    number_densities,
+    ml_metrics: dict | None,
+    button_key: str,
+) -> None:
+    """Render the Submit-to-global-model button + handle the POST.
+
+    Only call this when the user has already checked the consent box.
+    """
+    endpoint, anon_key = _get_cl_endpoint()
+    sent_key = f"_cl_sent_{button_key}"
+    if not endpoint or not anon_key:
+        st.caption(
+            "🌐 *Submission portal not configured for this deployment.* Use the "
+            "CSV download below as a local backup; the operator will collect "
+            "submissions manually until the cloud endpoint is wired up."
+        )
+        return
+
+    if st.session_state.get(sent_key):
+        sub_id = st.session_state[sent_key]
+        st.success(
+            f"✓ Submitted to the global model corpus. Reference id: "
+            f"`{sub_id}`. Thank you for contributing!"
+        )
+        return
+
+    if st.button("📡  Submit this analysis to the global model",
+                 type="primary", key=button_key, width="stretch"):
+        try:
+            payload = build_submission_payload(
+                method=method,
+                path_length_cm=float(path_length_cm),
+                user_id=_current_username(),
+                reference_file=reference_file,
+                measured_file=measured_file,
+                wavelengths=wavelengths,
+                measured=measured,
+                reconstructed=reconstructed,
+                species=species,
+                number_densities=number_densities,
+                ml_metrics=ml_metrics,
+            )
+            with st.spinner("Uploading…"):
+                submission_id = submit_to_global_model(
+                    payload, endpoint=endpoint, anon_key=anon_key
+                )
+        except SubmissionError as exc:
+            st.error(f"Submission failed: {exc}")
+            return
+        except Exception as exc:                          # noqa: BLE001
+            st.error(f"Submission failed unexpectedly: {exc}")
+            return
+
+        st.session_state[sent_key] = submission_id
+        st.rerun()
+
+
+# ────────────────────────────────────────────────────────────────────────────
 # UI primitives
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -1072,35 +1163,63 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 mime="text/csv",
                 width="stretch",
             )
-            if inputs.get("cl_consent"):
-                if result["kind"] == "linear":
+            if inputs.get("cl_consent") and result["kind"] == "ml":
+                native = result["_native"]
+                method_inputs = str(inputs.get("method", "Machine learning"))
+                method_payload = "machine_learning"
+
+                # Primary action: submit to the global corpus.
+                render_submit_to_global_model(
+                    method=method_payload,
+                    path_length_cm=float(inputs.get("path_length", 15.0)),
+                    reference_file=str(inputs.get("ref", "")),
+                    measured_file=str(inputs.get("meas", "")),
+                    wavelengths=native.wavelengths,
+                    measured=native.measured_absorbance,
+                    reconstructed=native.reconstructed,
+                    species=native.species,
+                    number_densities=native.number_densities,
+                    ml_metrics=native.metrics,
+                    button_key="submit_single_ml",
+                )
+
+                # Local backup CSV
+                cl_frame = build_continual_learning_frame_ml_single(
+                    ml_result=native,
+                    wavelengths=native.wavelengths,
+                    measured_absorbance=native.measured_absorbance,
+                    path_length_cm=float(inputs.get("path_length", 15.0)),
+                    reference_file=str(inputs.get("ref", "")),
+                    measured_file=str(inputs.get("meas", "")),
+                )
+                st.download_button(
+                    "Download continual-learning sample (CSV, local backup)",
+                    data=cl_frame.to_csv(index=False).encode("utf-8"),
+                    file_name="oas_cl_sample_ml.csv",
+                    mime="text/csv",
+                    width="stretch",
+                )
+            else:
+                # LR uses a simpler "save reconstruction" framing — no submit.
+                if inputs.get("cl_consent") and result["kind"] == "linear":
                     cl_frame = build_continual_learning_frame_single(
                         result=result["_native"],
                         path_length_cm=float(inputs.get("path_length", 15.0)),
                         reference_file=str(inputs.get("ref", "")),
                         measured_file=str(inputs.get("meas", "")),
                     )
-                    cl_name = "oas_cl_sample_linear.csv"
-                else:
-                    native = result["_native"]
-                    cl_frame = build_continual_learning_frame_ml_single(
-                        ml_result=native,
-                        wavelengths=native.wavelengths,
-                        measured_absorbance=native.measured_absorbance,
-                        path_length_cm=float(inputs.get("path_length", 15.0)),
-                        reference_file=str(inputs.get("ref", "")),
-                        measured_file=str(inputs.get("meas", "")),
+                    st.download_button(
+                        "Download continual-learning sample (CSV)",
+                        data=cl_frame.to_csv(index=False).encode("utf-8"),
+                        file_name="oas_cl_sample_linear.csv",
+                        mime="text/csv",
+                        width="stretch",
                     )
-                    cl_name = "oas_cl_sample_ml.csv"
-                st.download_button(
-                    "Download continual-learning sample (CSV)",
-                    data=cl_frame.to_csv(index=False).encode("utf-8"),
-                    file_name=cl_name,
-                    mime="text/csv",
-                    width="stretch",
-                )
-            else:
-                st.caption("Enable the *continual-learning* checkbox above to unlock the CL export.")
+                else:
+                    st.caption(
+                        "Enable the *continual-learning* checkbox above to unlock the CL export "
+                        "and (for ML) the global-model submission."
+                    )
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -1367,6 +1486,7 @@ def require_login_if_enabled() -> None:
         )
         if ok:
             st.session_state["authenticated"] = True
+            st.session_state["username"] = str(username).strip()
             st.rerun()
         else:
             st.error("Invalid username or password.")
