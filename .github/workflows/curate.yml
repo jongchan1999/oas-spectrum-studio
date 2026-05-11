@@ -1,0 +1,72 @@
+name: Curate continual-learning submissions
+
+# Default: manual trigger only. Once the cadence is stable, uncomment the
+# `schedule:` block to run weekly. The release_id input becomes the
+# folder name + the value written into cl_submissions.release_id.
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Release tag (e.g. v2). Default = UTC timestamp.'
+        required: false
+        default: ''
+      dry_run:
+        description: 'Dry-run: do not PATCH submission statuses.'
+        type: boolean
+        default: false
+  # schedule:
+  #   - cron: '0 6 * * 1'   # weekly, Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  curate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          lfs: false       # we only need source code, not the .pth checkpoint
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install runtime deps
+        run: |
+          # Curation only needs numpy + pandas; install lean and skip torch.
+          python -m pip install --upgrade pip
+          python -m pip install "numpy>=1.26" "pandas>=2.2"
+
+      - name: Verify Supabase secrets are set
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret"
+            exit 1
+          fi
+
+      - name: Run curation
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.release_id }}" ]; then
+            ARGS="$ARGS --release-id ${{ inputs.release_id }}"
+          fi
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python scripts/curate.py $ARGS
+
+      - name: Upload release pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: curated-${{ github.run_id }}
+          path: curated/
+          if-no-files-found: warn
+          retention-days: 30

@@ -1,8 +1,12 @@
 # Continual Learning Backend — Design
 
-> Status: design only. No code yet. Reviewed → then we implement stage by
-> stage. The current app only exports CL samples as CSV; this document
-> describes how those samples flow into model retraining.
+> Status:
+> - **Phase 1 (submission endpoint + app submit button)** — ✅ live.
+>   See [supabase/](../supabase/) and [oas_web/cl_submit.py](../oas_web/cl_submit.py).
+> - **Phase 2 (curation worker)** — ✅ shipped.
+>   See [scripts/curate.py](../scripts/curate.py) and
+>   [oas_web/curation.py](../oas_web/curation.py).
+> - **Phase 3 (fine-tune + eval harness)** — design below, code pending.
 
 ## Goals
 
