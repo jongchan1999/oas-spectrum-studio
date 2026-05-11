@@ -21,6 +21,9 @@ analysis front-end for a continual-learning OAS model.
   explicit consent line ("contribute to global model improvement").
 - **Optional login gate** — Streamlit secrets allow-list.
 
+For the continual-learning backend (upload endpoint → curation → fine-tune
+jobs), see [docs/CONTINUAL_LEARNING.md](docs/CONTINUAL_LEARNING.md).
+
 ## Run locally
 
 ```bash
