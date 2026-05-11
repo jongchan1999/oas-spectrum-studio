@@ -104,6 +104,32 @@ alter table public.cl_submission_species enable row level security;
 -- (Intentionally no policies created; default-deny is what we want.)
 
 -- ────────────────────────────────────────────────────────────────────────────
+-- 5b) Explicit GRANTs to service_role
+--
+-- service_role bypasses RLS, but it still needs table-level GRANTs. In
+-- Supabase those are normally provided by the "Automatically expose new
+-- tables" project setting; when that setting is OFF, the GRANTs never get
+-- applied and the edge function fails with `permission denied for table`.
+-- Make the GRANTs explicit so the schema is self-sufficient regardless of
+-- project-level toggles.
+-- ────────────────────────────────────────────────────────────────────────────
+
+grant usage on schema public      to service_role;
+grant usage on schema owner_only  to service_role;
+
+grant all privileges on table public.cl_submissions        to service_role;
+grant all privileges on table public.cl_submission_species to service_role;
+grant all privileges on table owner_only.filename_map      to service_role;
+
+grant all privileges on all sequences in schema public     to service_role;
+grant all privileges on all sequences in schema owner_only to service_role;
+
+alter default privileges in schema public
+    grant all privileges on tables to service_role;
+alter default privileges in schema owner_only
+    grant all privileges on tables to service_role;
+
+-- ────────────────────────────────────────────────────────────────────────────
 -- 6) Storage bucket sanity (run separately via Supabase dashboard or CLI)
 -- ────────────────────────────────────────────────────────────────────────────
 --
