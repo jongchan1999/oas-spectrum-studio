@@ -6,7 +6,11 @@
 > - **Phase 2 (curation worker)** — ✅ shipped.
 >   See [scripts/curate.py](../scripts/curate.py) and
 >   [oas_web/curation.py](../oas_web/curation.py).
-> - **Phase 3 (fine-tune + eval harness)** — design below, code pending.
+> - **Phase 3 (fine-tune + eval harness)** — ✅ shipped.
+>   See [scripts/finetune.py](../scripts/finetune.py),
+>   [machine_learning/finetune.py](../machine_learning/finetune.py),
+>   [machine_learning/evaluate.py](../machine_learning/evaluate.py),
+>   and [`.github/workflows/finetune.yml`](../.github/workflows/finetune.yml).
 
 ## Goals
 

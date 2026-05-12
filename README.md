@@ -22,7 +22,7 @@
       <img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-22c55e" />
     </a>
     <a href="docs/CONTINUAL_LEARNING.md">
-      <img alt="Continual learning" src="https://img.shields.io/badge/continual--learning-Phase%202-7c3aed" />
+      <img alt="Continual learning" src="https://img.shields.io/badge/continual--learning-Phase%203-7c3aed" />
     </a>
   </p>
 
@@ -144,7 +144,7 @@ Components:
 |---|---|---|
 | 1. Submission endpoint | [`supabase/`](supabase/) (`schema.sql` + `functions/submit/`) + [`oas_web/cl_submit.py`](oas_web/cl_submit.py) | ✅ Live |
 | 2. Curation worker | [`scripts/curate.py`](scripts/curate.py) + [`.github/workflows/curate.yml`](.github/workflows/curate.yml) | ✅ Shipped |
-| 3. Fine-tune + eval | `machine_learning/finetune.py` (planned) | ⛔ Pending |
+| 3. Fine-tune + eval | [`machine_learning/finetune.py`](machine_learning/finetune.py) + [`evaluate.py`](machine_learning/evaluate.py) + [`.github/workflows/finetune.yml`](.github/workflows/finetune.yml) | ✅ Shipped |
 
 Set up your own Supabase project by following [`supabase/README.md`](supabase/README.md).
 

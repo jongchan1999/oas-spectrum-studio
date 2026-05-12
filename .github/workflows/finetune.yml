@@ -1,0 +1,116 @@
+name: Fine-tune ML release
+
+# Manual trigger only. Run this AFTER `Curate continual-learning submissions`
+# has produced `curated/<release>/dataset.npz` and uploaded it as an artifact.
+#
+# Input artifacts (required):
+#   - the curated artefact for the same release_id (downloaded from the
+#     "Curate continual-learning submissions" run page, OR re-curated
+#     here by passing `run_curation_first: true`).
+#
+# Output artifact:
+#   releases/<release_id>/ (zip)
+#     ├── <release_id>.pth
+#     ├── training_log.csv
+#     ├── training_summary.json
+#     ├── eval.json
+#     └── report.md
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: 'Release tag the curated/ pack uses (e.g. v2). Must already exist.'
+        required: true
+      curated_artifact_run_id:
+        description: 'GitHub Actions run id of the curate run that produced curated/<release>/. Leave blank to re-curate here.'
+        required: false
+        default: ''
+      epochs:
+        description: 'Number of fine-tune epochs.'
+        required: false
+        default: '5'
+      lr:
+        description: 'Learning rate.'
+        required: false
+        default: '1e-5'
+      include_ml:
+        description: 'Also use ML-method submissions as training targets.'
+        type: boolean
+        default: false
+      strict:
+        description: 'Tighter promotion gates (2%% / 5%%).'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  finetune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          lfs: true             # pull the baseline .pth via Git LFS
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install deps (CPU torch — fine-tune is small enough)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            "numpy>=1.26" "pandas>=2.2" "torch>=2.2,<3" "torchvision>=0.17,<1" \
+            "scikit-learn>=1.4" "pillow>=10.2"
+
+      - name: Re-curate (optional)
+        if: ${{ inputs.curated_artifact_run_id == '' }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "::error::Need SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY secrets for re-curate"
+            exit 1
+          fi
+          python scripts/curate.py --release-id "${{ inputs.release_id }}"
+
+      - name: Download curated artifact (when run id provided)
+        if: ${{ inputs.curated_artifact_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.curated_artifact_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .
+
+      - name: Run fine-tune + evaluation
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.include_ml }}" = "true" ]; then
+            EXTRA="$EXTRA --include-ml"
+          fi
+          if [ "${{ inputs.strict }}" = "true" ]; then
+            EXTRA="$EXTRA --strict"
+          fi
+          python scripts/finetune.py \
+            --release-id "${{ inputs.release_id }}" \
+            --epochs "${{ inputs.epochs }}" \
+            --lr "${{ inputs.lr }}" \
+            $EXTRA
+
+      - name: Upload release artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ inputs.release_id }}-${{ github.run_id }}
+          path: |
+            releases/${{ inputs.release_id }}/
+            models/latest.json
+          if-no-files-found: warn
+          retention-days: 30
