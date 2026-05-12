@@ -46,8 +46,34 @@ from oas_web.cl_submit import (
 
 
 ROOT = Path(__file__).resolve().parent
-ML_DEFAULT_PTH = ROOT / "machine_learning" / "exp_4_epoch_3000.pth"
+ML_FALLBACK_PTH = ROOT / "machine_learning" / "exp_4_epoch_3000.pth"
+ML_LATEST_POINTER = ROOT / "models" / "latest.json"
 HERO_IMAGE_PATH = ROOT / "assets" / "spectroscopy.png"
+
+
+def _resolve_active_checkpoint() -> tuple[Path, str]:
+    """Return (path, release_id) for the currently active ML release.
+
+    Reads `models/latest.json` first — that's where the fine-tune
+    pipeline writes the newest promoted checkpoint. Falls back to the
+    bundled baseline so the app keeps working out of the box.
+    """
+    import json as _json
+    if ML_LATEST_POINTER.exists():
+        try:
+            data = _json.loads(ML_LATEST_POINTER.read_text(encoding="utf-8"))
+            rel_path = str(data.get("path", "")).strip()
+            release_id = str(data.get("release_id", "baseline")).strip() or "baseline"
+            if rel_path:
+                candidate = (ROOT / rel_path).resolve()
+                if candidate.exists():
+                    return candidate, release_id
+        except Exception:
+            pass
+    return ML_FALLBACK_PTH, "baseline"
+
+
+ML_DEFAULT_PTH, ML_RELEASE_ID = _resolve_active_checkpoint()
 
 st.set_page_config(
     page_title="OAS Spectrum Studio",
@@ -807,8 +833,8 @@ def render_sidebar() -> tuple[str, FitConfig]:
             <div class="status-row">
                 <span class="status-dot {'ok' if ml_ready else 'warn'}"></span>
                 <div class="status-text">
-                    <div class="status-label">ML checkpoint</div>
-                    <div class="status-value">{ML_DEFAULT_PTH.name}</div>
+                    <div class="status-label">ML release</div>
+                    <div class="status-value">{ML_RELEASE_ID} · <code>{ML_DEFAULT_PTH.name}</code></div>
                 </div>
             </div>
             <div class="status-row">

@@ -30,11 +30,25 @@ These are the things you need to do (or can have me do) to take this from
 
 2. **Accumulate a real corpus.** Phase 3 fine-tune needs roughly **20+
    diverse submissions** in `cl_submissions` to demonstrate model
-   improvement. Easiest way to seed: from the Streamlit app, run Single
-   OAS mode on ~20 time-points from `Source_70_2/`, check the ML consent
-   box, and hit Submit on each. **~30 minutes** of clicking, or:
-   batch-script it (TODO: a tiny helper `scripts/seed_submissions.py`
-   that POSTs N analyses straight to the edge function).
+   improvement. Use the helper, not clicks:
+
+   ```powershell
+   # PowerShell. Set the cl endpoint either via env vars
+   $env:CL_ENDPOINT = "https://bvgsyrxratdkqjfucisl.functions.supabase.co/submit"
+   $env:CL_ANON_KEY = "<anon public key>"
+   # …or fill the [cl] section of .streamlit/secrets.toml.
+
+   python scripts\seed_submissions.py `
+     --data-dir "C:\Users\kimjo\spectroscopy\OAS tool\260429\260429_analysis_OAS-2\Source heating\70\2\Source_70_2" `
+     --reference Source_70_2_00000.txt `
+     --n 20 `
+     --user-id seeder
+   ```
+
+   Each frame runs locally as linear regression (trusted labels) and
+   POSTs through the same edge function the Streamlit app uses. Expect
+   ~20 new rows in `cl_submissions` within a minute. Run `--dry-run`
+   first if you want to verify the pipeline without touching the DB.
 
 3. **Run the first Phase 2 + Phase 3 release end-to-end on real data.**
    - Curate: workflow `curate.yml` → release_id `v1`, dry-run off.
