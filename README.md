@@ -183,6 +183,8 @@ Set up your own Supabase project by following [`supabase/README.md`](supabase/RE
 
 - 📹 [`docs/DEMO_VIDEO_SCRIPT.md`](docs/DEMO_VIDEO_SCRIPT.md) — shot-by-shot
   recording script (bilingual, ~3 min).
+- 🎬 [`docs/DEMO_RECORDING_GUIDE.md`](docs/DEMO_RECORDING_GUIDE.md) —
+  beginner's how-to (tools, OBS setup, Shotcut captions, export).
 - 🧭 [`docs/STATUS.md`](docs/STATUS.md) — what's done, what's next.
 - 🚀 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) — go-public
   punch list.
@@ -225,56 +227,45 @@ docs/                           # see "Documentation" above
 
 ## Citation
 
-If you use OAS Spectrum Studio in any publication, talk, or derivative
-work, you **must** cite all three references below. The two journal
-papers underpin the ML methodology and the OAS plasma context this tool
-operationalises; please do not cite the software alone.
+Cite **all three** entries below in any publication, talk, or derivative
+work — the software entry alone is not sufficient.
 
-**1. ML methodology — required**
+1. **Methodology.** Kim, J., Huh, S.-C., Bae, J. H., Shin, S.-J., & Park, S.
+   *Deep spectral deconvolution for image-based broadband spectral data
+   analysis.* Sensors and Actuators B: Chemical (2026).
+   [doi:10.1016/j.snb.2025.139369](https://doi.org/10.1016/j.snb.2025.139369)
 
-Kim J., Huh S.-C., Bae J. H., Shin S.-J., and Park S.
-*Deep spectral deconvolution for image-based broadband spectral data
-analysis.* **Sensors and Actuators B: Chemical**, 2026-03.
-DOI: [10.1016/j.snb.2025.139369](https://doi.org/10.1016/j.snb.2025.139369)
+2. **Plasma OAS context.** Huh, S.-C. *et al.*
+   Plasma Sources Sci. Technol. **33**, 075007 (2024).
+   [doi:10.1088/1361-6595/ad5ebb](https://doi.org/10.1088/1361-6595/ad5ebb)
+
+3. **Software.** Kim, J. & Park, S. *OAS Spectrum Studio — a Streamlit
+   analyser for optical absorption spectroscopy with a continual-learning
+   loop.* APRIL Lab, KAIST (2026).
+   <https://github.com/jongchan1999/oas-spectrum-studio>
+
+<details>
+<summary>BibTeX</summary>
 
 ```bibtex
 @article{Kim2026DeepSpectralDeconvolution,
   title   = {Deep spectral deconvolution for image-based broadband spectral data analysis},
   author  = {Kim, Jongchan and Huh, Seong-Cheol and Bae, Jin Hee and Shin, Su-Jin and Park, Sanghoo},
   journal = {Sensors and Actuators B: Chemical},
-  year    = {2026},
-  month   = {3},
+  year    = {2026}, month = {3},
   doi     = {10.1016/j.snb.2025.139369}
 }
-```
-
-**2. Plasma OAS context — required**
-
-Huh S.-C. *et al.* **Plasma Sources Sci. Technol.** 33, 075007 (2024).
-DOI: [10.1088/1361-6595/ad5ebb](https://doi.org/10.1088/1361-6595/ad5ebb)
-
-```bibtex
 @article{Huh2024PlasmaSources,
   author  = {Huh, Seong-Cheol and others},
   journal = {Plasma Sources Science and Technology},
-  volume  = {33},
-  number  = {7},
-  pages   = {075007},
-  year    = {2024},
+  volume  = {33}, number = {7}, pages = {075007}, year = {2024},
   doi     = {10.1088/1361-6595/ad5ebb}
 }
 ```
 
-**3. Software (this repository)**
+</details>
 
-> Kim J. and Park S. (APRIL Lab, KAIST). *OAS Spectrum Studio — a
-> Streamlit-hosted analyser for optical absorption spectroscopy with a
-> continual-learning loop.* 2026.
-> https://github.com/jongchan1999/oas-spectrum-studio
-
-A machine-readable copy of this citation block is in
-[`CITATION.cff`](CITATION.cff); a formal BibTeX entry for the
-companion paper will appear once it is on arXiv.
+Machine-readable form: [`CITATION.cff`](CITATION.cff).
 
 ## License
 
