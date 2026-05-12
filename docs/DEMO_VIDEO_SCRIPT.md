@@ -413,50 +413,60 @@ auto-resolves it. Recipe with ScreenToGif:
 3. `Editor` → **Save as → GIF** → palette `Octree`, 64 colours, target
    **≤ 8 MB**. Save as `docs/assets/demo-hero.gif`.
 
-## 4. Hosting + sharing
+## 4. Hosting + sharing — self-contained MP4 (no YouTube)
 
-### YouTube (recommended)
+The video is kept as a single MP4 inside the repo (Git LFS) so it plays
+offline (PowerPoint, USB at a conference, embedded in this README) and
+does not depend on any third-party account.
 
-1. Upload as **Unlisted** (link-only).
-2. Title: `OAS Studio — silent 3-minute walkthrough`.
-3. Description (first line is what appears in embed previews):
-   ```
-   A 3-minute silent walkthrough of OAS Studio — drop in spectra, get
-   8-species concentrations, opt in to grow the next model.
+### Step 1 — Export the right format
 
-   Try it:   https://oas-spectrum-studio.streamlit.app
-   Source:   https://github.com/jongchan1999/oas-spectrum-studio
-   ```
-4. Chapters (paste timestamps in the description so YouTube renders the
-   in-player chapter strip):
-   ```
-   0:00 Intro
-   0:10 What is OAS?
-   0:25 App tour
-   0:40 Uploading spectra
-   1:05 Linear regression
-   1:40 Machine learning + consent
-   2:10 Time-series
-   2:35 Continual learning
-   2:50 Outro
-   ```
-5. Tags: `optical absorption spectroscopy, OAS, NO2, ozone, plasma
-   diagnostics, continual learning, Streamlit, ResNet, NNLS`.
-6. After upload, copy the 11-char video ID (the part after `v=`).
+Final encode target (any editor — ScreenPal export, Shotcut "Export →
+H.264", OBS "Format MP4"):
 
-### Drop the YouTube ID into the README
+| | |
+|---|---|
+| Container | **MP4** (H.264 video, no audio track) |
+| Resolution | 1920 × 1080 |
+| Frame rate | 30 fps |
+| Bitrate    | ~4–6 Mbps → ~25–55 MB for a 3 min clip |
+| Audio      | **strip entirely** (silent screencast) |
+| Filename   | exactly **`demo.mp4`** |
 
-Edit [`README.md`](../README.md) once: search for `REPLACE_WITH_YT_ID`
-and replace with the real ID. Both the hero "Watch the 3-minute demo"
-link and the *At a glance* row resolve automatically. **Nothing else
-needs to change.**
+### Step 2 — Drop the file in
 
-### Conference / lab share
+Save the MP4 at:
 
-- The Unlisted link works in slide PDFs, posters, and abstracts — no
-  Google account required for viewers.
-- Keep an MP4 backup on a USB at the venue (YouTube Studio →
-  `Manage videos → ⋮ → Download`).
+    docs/demo/demo.mp4
+
+Then from the repo root:
+
+```
+git lfs install                        # one-time per machine
+git add docs/demo/demo.mp4
+git commit -m "Add demo video"
+git push origin main
+```
+
+The repo's [`docs/demo/README.md`](demo/README.md) explains the
+LFS-tracking and naming convention in more detail.
+
+### Step 3 — Verify
+
+- Open the repo's main README on GitHub. The `<video>` block under the
+  hero should now render with playback controls.
+- Click the "▶ Watch the 3-minute demo (MP4, offline-playable)" link in
+  the hero — it should start a download or open inline (browser
+  dependent).
+- For PowerPoint: *Insert → Video → This Device →* point at
+  `docs/demo/demo.mp4` from your local clone. Travels with the deck.
+- For a USB handout: copy the file directly.
+
+### (Optional) Conference / talk distribution
+
+- Add the same MP4 to the conference's supplementary materials zip.
+- Re-encode at a lower bitrate (2 Mbps, ~15 MB) if the venue requires a
+  smaller file — see `docs/demo/README.md` for an `ffmpeg` one-liner.
 
 ## 5. Things that must not appear in the recording
 
@@ -479,8 +489,9 @@ In ScreenPal / Shotcut:
 2. Add 0.5 s cross-fades between scenes.
 3. Drop captions on the lower-third using the style guide above.
 4. Bake in the title and outro cards (10 s static + 10 s static).
-5. Export as MP4 H.264, 1080p 30 fps. Target file size ≤ 50 MB so
-   YouTube doesn't re-encode aggressively.
+5. Export as **MP4 H.264, 1080p 30 fps, no audio track**. Target file
+   size 25–50 MB. Save the final file as `docs/demo/demo.mp4` (see the
+   Hosting + sharing section).
 
 Total time from "press record" to "uploaded": about an hour. The script
 above is meant to be filmed in one continuous take with the captions

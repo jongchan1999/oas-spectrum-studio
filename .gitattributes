@@ -6,6 +6,12 @@
 *.onnx filter=lfs diff=lfs merge=lfs -text
 *.safetensors filter=lfs diff=lfs merge=lfs -text
 
+# Demo video — keep portable + offline-friendly; track via LFS so the
+# repo stays small while the README still embeds a playable <video>.
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+*.mov filter=lfs diff=lfs merge=lfs -text
+*.webm filter=lfs diff=lfs merge=lfs -text
+
 # Normalize line endings on text files so Windows checkouts don't churn diffs.
 * text=auto eol=lf
 *.bat text eol=crlf
