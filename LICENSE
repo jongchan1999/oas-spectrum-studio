@@ -1,6 +1,8 @@
 MIT License
 
-Copyright (c) 2026 Jongchan Kim and contributors
+Copyright (c) 2026 Jongchan Kim
+                   APRIL Lab (Applied Plasma Research & Innovation Lab), KAIST
+                   https://sites.google.com/view/plasmalab/
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -21,12 +23,33 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 ──────────────────────────────────────────────────────────────────────────────
+WHAT THIS MEANS, IN PLAIN LANGUAGE
+
+* Anyone may use, copy, modify, distribute, or build commercial products
+  on top of this software, free of charge.
+* The only obligation is to keep the copyright notice and this permission
+  text included with any copy or substantial portion of the code.
+* The software is provided "as is" — no warranties, no liability.
+
+The MIT licence is the most common choice for academic research code
+because it imposes the fewest restrictions while still requiring
+attribution to the original authors and their institution.
+
+──────────────────────────────────────────────────────────────────────────────
+ATTRIBUTION
+
+Developed in:
+    APRIL Lab (Applied Plasma Research & Innovation Lab)
+    KAIST — Korea Advanced Institute of Science and Technology
+    https://sites.google.com/view/plasmalab/
+
+Maintainer:
+    Jongchan Kim <jongchan5652@gmail.com>
+
+──────────────────────────────────────────────────────────────────────────────
 NOTE (review before public announcement)
 
-This MIT licence is the most permissive common choice for research code and
-is the default for this repository. Before announcing the public link in a
-paper or talk, confirm with your principal investigator / department's tech
-transfer office that MIT is appropriate. If a more restrictive licence is
-needed (e.g. CC BY-NC for academic-only reuse, or a custom dual licence for
-a future spin-out), replace this file before publication and update
+If APRIL Lab / KAIST tech transfer requires a different licence (e.g.
+CC BY-NC for academic-only reuse, or a custom dual licence for a future
+spin-out), replace this file before publication and update
 docs/RELEASE_CHECKLIST.md accordingly.

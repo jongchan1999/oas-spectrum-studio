@@ -10,6 +10,11 @@
   <p><strong>A single-screen analyser for Optical Absorption Spectroscopy,
   grown by the community.</strong></p>
 
+  <p><sub>Developed at the
+  <a href="https://sites.google.com/view/plasmalab/"><b>APRIL Lab</b>
+  (Applied Plasma Research &amp; Innovation Lab)</a>,
+  <a href="https://www.kaist.ac.kr/">KAIST</a>.</sub></p>
+
   <p>
     <a href="https://oas-spectrum-studio.streamlit.app">
       <img alt="Live demo"
@@ -23,6 +28,9 @@
     </a>
     <a href="docs/CONTINUAL_LEARNING.md">
       <img alt="Continual learning" src="https://img.shields.io/badge/continual--learning-Phase%203-7c3aed" />
+    </a>
+    <a href="https://sites.google.com/view/plasmalab/">
+      <img alt="APRIL Lab" src="https://img.shields.io/badge/lab-APRIL%20%C2%B7%20KAIST-4f46e5" />
     </a>
   </p>
 
@@ -65,7 +73,7 @@ swapping methods or scaling up to a 343-frame run requires no relearning.
 | **Demo video** | `https://youtu.be/REPLACE_WITH_YT_ID` *(3 min, unlisted)* |
 | **Tech** | Streamlit · scikit-learn · PyTorch (CPU) · Plotly · Supabase |
 | **Continual learning** | App → Supabase Edge Function → curation worker (GitHub Action) → fine-tune (next release) |
-| **Status** | Frontend + Phase 1 (submission) + Phase 2 (curation) live · Phase 3 (fine-tune) pending |
+| **Status** | Frontend live · CL Phases 1·2·3 all shipped · v1 fine-tune ran (gates blocked — overall RMSE −10 %, NO −19 %, but NO₃ regressed → baseline retained) |
 
 ## Run locally
 
@@ -113,16 +121,27 @@ Filename pattern: `{SPECIES}_ordered_cross_section.txt`.
 1. Fork / push this repo to GitHub.
 2. In Streamlit Cloud, point a new app at `app.py`. Streamlit's runner
    pulls the .pth via LFS automatically.
-3. *App settings → Secrets*: paste both blocks below (real values).
+3. *App settings → Secrets*: paste the template below and **replace every
+   placeholder with real values**. Streamlit Cloud stores these
+   server-side and never exposes them publicly. Never commit real
+   credentials to git.
 
 ```toml
+# ⚠ TEMPLATE — replace EVERY value before saving.
+# alice/pw1 are NOT real users; <project-ref> and "eyJ..." are NOT real keys.
+
 [auth]
 enabled = true
-users = { "alice" = "pw1", "bob" = "pw2" }
+# Pick strong passwords. Each entry below grants read access to the app.
+users = { "alice" = "REPLACE-WITH-STRONG-PASSWORD-1",
+          "bob"   = "REPLACE-WITH-STRONG-PASSWORD-2" }
 
-[cl]                                                # optional
-endpoint = "https://<project-ref>.functions.supabase.co/submit"
-anon_key = "eyJ..."
+# [cl] is optional. Leave commented out until your Supabase project is
+# deployed (see supabase/README.md). Without it the app falls back to
+# local CSV-only mode.
+# [cl]
+# endpoint = "https://<your-project-ref>.functions.supabase.co/submit"
+# anon_key = "<paste anon public key from Supabase Settings → API>"
 ```
 
 See [DEPLOYMENT_PRIVATE.md](DEPLOYMENT_PRIVATE.md) for the strict
@@ -196,23 +215,33 @@ docs/                           # see "Documentation" above
 
 If you use this tool in a publication, please cite:
 
-> Jongchan Kim. *OAS Spectrum Studio — a Streamlit-hosted analyser for
-> optical absorption spectroscopy with a continual-learning loop.* 2026.
-> Available at https://github.com/jongchan1999/oas-spectrum-studio
+> Jongchan Kim and the APRIL Lab. *OAS Spectrum Studio — a
+> Streamlit-hosted analyser for optical absorption spectroscopy with a
+> continual-learning loop.* APRIL Lab (Applied Plasma Research &
+> Innovation Lab), KAIST, 2026.
+> https://github.com/jongchan1999/oas-spectrum-studio
 
-A formal BibTeX entry will appear once the paper is on arXiv.
+A machine-readable citation is provided in
+[`CITATION.cff`](CITATION.cff); a formal BibTeX entry will appear once
+the paper is on arXiv.
 
 ## License
 
-[MIT](LICENSE). See note in the licence file before you announce the
-public link in a paper — confirm the choice with your PI / tech transfer
-office.
+[MIT](LICENSE) © 2026 Jongchan Kim & APRIL Lab, KAIST. The most
+permissive common choice for research code — anyone may use, modify,
+and redistribute, provided the copyright notice is kept intact. See the
+note inside the licence file before announcing the public link in a
+paper or talk; confirm with your PI / tech transfer office that MIT is
+appropriate.
 
 ---
 
 <div align="center">
-  <sub>Built by Jongchan Kim (KAIST plasma group) · 2026<br/>
-  Want to contribute or request access?
+  <sub><b>Developed at <a href="https://sites.google.com/view/plasmalab/">APRIL Lab</a>
+  (Applied Plasma Research &amp; Innovation Lab),
+  <a href="https://www.kaist.ac.kr/">KAIST</a> · 2026</b></sub><br/>
+  <sub>Maintainer: <a href="mailto:jongchan5652@gmail.com">Jongchan Kim</a>
+  &nbsp;·&nbsp;
   <a href="https://github.com/jongchan1999/oas-spectrum-studio/issues/new">Open an issue</a>
-  or email the maintainer.</sub>
+  to contribute, request access, or report a bug.</sub>
 </div>

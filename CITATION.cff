@@ -1,0 +1,35 @@
+# Citation metadata for GitHub's "Cite this repository" button + Zenodo.
+# See https://citation-file-format.github.io/
+
+cff-version: 1.2.0
+title: "OAS Spectrum Studio"
+message: >-
+  If you use this software in published work, please cite it as below.
+type: software
+authors:
+  - given-names: Jongchan
+    family-names: Kim
+    email: jongchan5652@gmail.com
+    affiliation: >-
+      APRIL Lab (Applied Plasma Research & Innovation Lab), KAIST
+abstract: >-
+  A Streamlit-hosted web application for Optical Absorption Spectroscopy
+  (OAS) that extracts chemical species concentrations from measured
+  absorbance spectra. The tool combines a positive non-negative least
+  squares (NNLS) baseline with a ResNet101 convolutional neural network
+  for inference, and ships a continual-learning back-end that turns
+  opted-in user submissions into the corpus for each next model release.
+keywords:
+  - optical absorption spectroscopy
+  - OAS
+  - chemical species retrieval
+  - continual learning
+  - non-negative least squares
+  - ResNet101
+  - Streamlit
+  - plasma diagnostics
+license: MIT
+repository-code: "https://github.com/jongchan1999/oas-spectrum-studio"
+url: "https://oas-spectrum-studio.streamlit.app"
+version: "1.0"
+date-released: "2026-05-12"
