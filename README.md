@@ -213,17 +213,56 @@ docs/                           # see "Documentation" above
 
 ## Citation
 
-If you use this tool in a publication, please cite:
+If you use OAS Spectrum Studio in any publication, talk, or derivative
+work, you **must** cite all three references below. The two journal
+papers underpin the ML methodology and the OAS plasma context this tool
+operationalises; please do not cite the software alone.
 
-> Jongchan Kim and the APRIL Lab. *OAS Spectrum Studio — a
+**1. ML methodology — required**
+
+Kim J., Huh S.-C., Bae J. H., Shin S.-J., and Park S.
+*Deep spectral deconvolution for image-based broadband spectral data
+analysis.* **Sensors and Actuators B: Chemical**, 2026-03.
+DOI: [10.1016/j.snb.2025.139369](https://doi.org/10.1016/j.snb.2025.139369)
+
+```bibtex
+@article{Kim2026DeepSpectralDeconvolution,
+  title   = {Deep spectral deconvolution for image-based broadband spectral data analysis},
+  author  = {Kim, Jongchan and Huh, Seong-Cheol and Bae, Jin Hee and Shin, Su-Jin and Park, Sanghoo},
+  journal = {Sensors and Actuators B: Chemical},
+  year    = {2026},
+  month   = {3},
+  doi     = {10.1016/j.snb.2025.139369}
+}
+```
+
+**2. Plasma OAS context — required**
+
+Huh S.-C. *et al.* **Plasma Sources Sci. Technol.** 33, 075007 (2024).
+DOI: [10.1088/1361-6595/ad5ebb](https://doi.org/10.1088/1361-6595/ad5ebb)
+
+```bibtex
+@article{Huh2024PlasmaSources,
+  author  = {Huh, Seong-Cheol and others},
+  journal = {Plasma Sources Science and Technology},
+  volume  = {33},
+  number  = {7},
+  pages   = {075007},
+  year    = {2024},
+  doi     = {10.1088/1361-6595/ad5ebb}
+}
+```
+
+**3. Software (this repository)**
+
+> Kim J. and Park S. (APRIL Lab, KAIST). *OAS Spectrum Studio — a
 > Streamlit-hosted analyser for optical absorption spectroscopy with a
-> continual-learning loop.* APRIL Lab (Applied Plasma Research &
-> Innovation Lab), KAIST, 2026.
+> continual-learning loop.* 2026.
 > https://github.com/jongchan1999/oas-spectrum-studio
 
-A machine-readable citation is provided in
-[`CITATION.cff`](CITATION.cff); a formal BibTeX entry will appear once
-the paper is on arXiv.
+A machine-readable copy of this citation block is in
+[`CITATION.cff`](CITATION.cff); a formal BibTeX entry for the
+companion paper will appear once it is on arXiv.
 
 ## License
 
@@ -239,9 +278,17 @@ appropriate.
 <div align="center">
   <sub><b>Developed at <a href="https://sites.google.com/view/plasmalab/">APRIL Lab</a>
   (Applied Plasma Research &amp; Innovation Lab),
-  <a href="https://www.kaist.ac.kr/">KAIST</a> · 2026</b></sub><br/>
-  <sub>Maintainer: <a href="mailto:jongchan5652@gmail.com">Jongchan Kim</a>
-  &nbsp;·&nbsp;
-  <a href="https://github.com/jongchan1999/oas-spectrum-studio/issues/new">Open an issue</a>
-  to contribute, request access, or report a bug.</sub>
+  <a href="https://www.kaist.ac.kr/">KAIST</a> · 2026</b></sub>
+  <br/>
+  <sub>
+    Principal investigator:
+    <a href="mailto:sanghoopark@kaist.ac.kr"><b>Sanghoo Park</b></a> ·
+    Maintainer / lead developer:
+    <a href="mailto:kimjongchan@kaist.ac.kr"><b>Jongchan Kim</b></a>
+  </sub>
+  <br/>
+  <sub>
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/issues/new">Open an issue</a>
+    to contribute, request access, or report a bug.
+  </sub>
 </div>

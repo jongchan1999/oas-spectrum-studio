@@ -88,8 +88,17 @@ in the next model release's `releases/vN.md`. We curate weekly.
 Please don't share the credentials further; if you need additional seats
 for your group, ping me and I'll create a per-person login.
 
+If you publish results obtained with this tool, please cite the two
+references in our README's "Citation" section (the methodology paper —
+Sensors and Actuators B: Chemical, 2026, doi 10.1016/j.snb.2025.139369 —
+and the plasma-OAS paper — Plasma Sources Sci. Technol. 33 075007,
+2024).
+
 Thanks!
-<your name>
+Jongchan Kim (developer)            kimjongchan@kaist.ac.kr
+Sanghoo Park (principal investigator) sanghoopark@kaist.ac.kr
+APRIL Lab · KAIST
+https://sites.google.com/view/plasmalab/
 ```
 
 ## 6. Licensing — pick one

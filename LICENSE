@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 Jongchan Kim
+Copyright (c) 2026 Jongchan Kim, Sanghoo Park, and contributors
                    APRIL Lab (Applied Plasma Research & Innovation Lab), KAIST
                    https://sites.google.com/view/plasmalab/
 
@@ -43,8 +43,11 @@ Developed in:
     KAIST — Korea Advanced Institute of Science and Technology
     https://sites.google.com/view/plasmalab/
 
-Maintainer:
-    Jongchan Kim <jongchan5652@gmail.com>
+Principal investigator:
+    Sanghoo Park <sanghoopark@kaist.ac.kr>
+
+Maintainer / lead developer:
+    Jongchan Kim <kimjongchan@kaist.ac.kr>
 
 ──────────────────────────────────────────────────────────────────────────────
 NOTE (review before public announcement)

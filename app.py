@@ -846,11 +846,15 @@ def render_sidebar() -> tuple[str, FitConfig]:
             </div>
         </div>
         <div class="sidebar-footer">
-            <div>OAS Studio · 2026</div>
+            <div><b>OAS Studio · 2026</b></div>
             <div style="margin-top:4px;">
                 <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
                 &nbsp;·&nbsp;
                 <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
+            </div>
+            <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
+                PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
+                Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
             </div>
         </div>
         """)

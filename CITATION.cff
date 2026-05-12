@@ -1,15 +1,28 @@
 # Citation metadata for GitHub's "Cite this repository" button + Zenodo.
 # See https://citation-file-format.github.io/
+#
+# IMPORTANT — if you use this software in a publication, citing the
+# software entry below is NOT sufficient. You must also cite both
+# references listed under `references:` (the methodology paper and the
+# plasma-OAS paper). See the "Citation" section of README.md.
 
 cff-version: 1.2.0
 title: "OAS Spectrum Studio"
 message: >-
-  If you use this software in published work, please cite it as below.
+  If you use this software, please cite the methodology paper and the
+  plasma-OAS paper listed under `references` IN ADDITION to this
+  software entry.
 type: software
 authors:
   - given-names: Jongchan
     family-names: Kim
-    email: jongchan5652@gmail.com
+    email: kimjongchan@kaist.ac.kr
+    affiliation: >-
+      APRIL Lab (Applied Plasma Research & Innovation Lab), KAIST
+    orcid: "https://orcid.org/0000-0000-0000-0000"  # update once available
+  - given-names: Sanghoo
+    family-names: Park
+    email: sanghoopark@kaist.ac.kr
     affiliation: >-
       APRIL Lab (Applied Plasma Research & Innovation Lab), KAIST
 abstract: >-
@@ -33,3 +46,42 @@ repository-code: "https://github.com/jongchan1999/oas-spectrum-studio"
 url: "https://oas-spectrum-studio.streamlit.app"
 version: "1.0"
 date-released: "2026-05-12"
+
+references:
+  - type: article
+    title: >-
+      Deep spectral deconvolution for image-based broadband spectral data
+      analysis
+    authors:
+      - given-names: Jongchan
+        family-names: Kim
+      - given-names: Seong-Cheol
+        family-names: Huh
+      - given-names: Jin Hee
+        family-names: Bae
+      - given-names: Su-Jin
+        family-names: Shin
+      - given-names: Sanghoo
+        family-names: Park
+    journal: "Sensors and Actuators B: Chemical"
+    year: 2026
+    month: 3
+    doi: "10.1016/j.snb.2025.139369"
+    notes: >-
+      Required citation: this paper introduces the ML methodology behind
+      OAS Spectrum Studio.
+  - type: article
+    title: >-
+      (See doi for full bibliographic record.)
+    authors:
+      - given-names: Seong-Cheol
+        family-names: Huh
+    journal: "Plasma Sources Science and Technology"
+    volume: "33"
+    number: "7"
+    start: "075007"
+    year: 2024
+    doi: "10.1088/1361-6595/ad5ebb"
+    notes: >-
+      Required citation: this paper provides the plasma-OAS context that
+      the tool was designed to operationalise.
