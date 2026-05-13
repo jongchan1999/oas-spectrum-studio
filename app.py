@@ -164,12 +164,20 @@ def inject_styles() -> None:
         flex-direction: column;
         min-height: calc(100vh - 3.5rem);
     }
-    /* Push only the credits block (`.sidebar-footer`) to the bottom edge.
-       Status pills stay in their natural mid-sidebar position. */
-    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-footer),
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-footer),
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-footer) {
+    /* Pin the combined .sidebar-bottom (status pills + credits) to the
+       bottom edge of the sidebar regardless of how much content precedes
+       it. We try both Streamlit wrapper styles + a direct rule on
+       .sidebar-bottom itself so at least one path always wins. */
+    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-bottom),
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-bottom),
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-bottom),
+    section[data-testid="stSidebar"] [data-testid*="stMarkdown"]:has(.sidebar-bottom) {
+        margin-top: auto !important;
+    }
+    .sidebar-bottom {
         margin-top: auto;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border);
     }
 
     /* Hero */
@@ -539,7 +547,7 @@ def inject_styles() -> None:
     }
 
     .sidebar-status {
-        margin: .25rem 0 .75rem 0;
+        margin: 0 0 .65rem 0;
         padding: .55rem .65rem;
         border: 1px solid var(--border);
         border-radius: 11px;
@@ -578,8 +586,8 @@ def inject_styles() -> None:
     }
 
     .sidebar-footer {
-        margin-top: 1rem;
-        padding-top: .75rem;
+        margin-top: .5rem;
+        padding-top: .55rem;
         border-top: 1px solid var(--border);
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.7rem;
@@ -844,37 +852,35 @@ def render_sidebar() -> tuple[str, FitConfig]:
             max_repeat=int(max_repeat),
         )
 
-        st.markdown("---")
         html(f"""
-        <div class="sidebar-status">
-            <div class="status-row">
-                <span class="status-dot {'ok' if ml_ready else 'warn'}"></span>
-                <div class="status-text">
-                    <div class="status-label">ML release</div>
-                    <div class="status-value">{ML_RELEASE_ID} · <code>{ML_DEFAULT_PTH.name}</code></div>
+        <div class="sidebar-bottom">
+            <div class="sidebar-status">
+                <div class="status-row">
+                    <span class="status-dot {'ok' if ml_ready else 'warn'}"></span>
+                    <div class="status-text">
+                        <div class="status-label">ML release</div>
+                        <div class="status-value">{ML_RELEASE_ID} · <code>{ML_DEFAULT_PTH.name}</code></div>
+                    </div>
+                </div>
+                <div class="status-row">
+                    <span class="status-dot ok"></span>
+                    <div class="status-text">
+                        <div class="status-label">Cross-sections</div>
+                        <div class="status-value">Cross_sections_modified · auto-detected</div>
+                    </div>
                 </div>
             </div>
-            <div class="status-row">
-                <span class="status-dot ok"></span>
-                <div class="status-text">
-                    <div class="status-label">Cross-sections</div>
-                    <div class="status-value">Cross_sections_modified · auto-detected</div>
+            <div class="sidebar-footer">
+                <div><b>OAS Studio · 2026</b></div>
+                <div style="margin-top:4px;">
+                    <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
+                    &nbsp;·&nbsp;
+                    <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
                 </div>
-            </div>
-        </div>
-        """)
-
-        html("""
-        <div class="sidebar-footer">
-            <div><b>OAS Studio · 2026</b></div>
-            <div style="margin-top:4px;">
-                <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
-                &nbsp;·&nbsp;
-                <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
-            </div>
-            <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
-                PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
-                Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
+                <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
+                    PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
+                    Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
+                </div>
             </div>
         </div>
         """)
