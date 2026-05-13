@@ -164,14 +164,13 @@ def inject_styles() -> None:
         flex-direction: column;
         min-height: calc(100vh - 3.5rem);
     }
-    /* Push everything from `.sidebar-status` downward to the bottom edge. */
-    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-status),
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-status),
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-status) {
+    /* Push only the credits block (`.sidebar-footer`) to the bottom edge.
+       Status pills stay in their natural mid-sidebar position. */
+    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-footer),
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-footer),
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-footer) {
         margin-top: auto;
     }
-    /* The sign-out lives between status and footer — give it discreet spacing. */
-    .sidebar-signout-wrap { margin: .35rem 0 .25rem 0; }
 
     /* Hero */
     /* Hero — refined deep-indigo gradient (less candy, more "lab report") */
@@ -794,14 +793,6 @@ def render_diagnostics(
 
 def render_sidebar() -> tuple[str, FitConfig]:
     ml_ready = ML_DEFAULT_PTH.exists()
-    try:
-        auth = st.secrets.get("auth", {})
-    except StreamlitSecretNotFoundError:
-        auth = {}
-    show_sign_out = (
-        bool(auth.get("enabled", False))
-        and bool(st.session_state.get("authenticated", False))
-    )
     with st.sidebar:
         html(f"""
         <div class="sidebar-brand">
@@ -872,18 +863,6 @@ def render_sidebar() -> tuple[str, FitConfig]:
             </div>
         </div>
         """)
-
-        if show_sign_out:
-            html('<div class="sidebar-signout-wrap"></div>')
-            if st.button(
-                "Sign out",
-                key="sidebar_sign_out_btn",
-                width="stretch",
-                type="secondary",
-            ):
-                st.session_state.pop("authenticated", None)
-                st.session_state.pop("username", None)
-                st.rerun()
 
         html("""
         <div class="sidebar-footer">
@@ -1515,8 +1494,9 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        # Sign out is rendered inside render_sidebar() so it sits at the
-        # bottom of the sidebar next to the credits, not at the top.
+        if st.sidebar.button("Sign out", width="stretch"):
+            st.session_state.pop("authenticated", None)
+            st.rerun()
         return
 
     render_hero(
