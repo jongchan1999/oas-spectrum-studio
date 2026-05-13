@@ -154,6 +154,24 @@ def inject_styles() -> None:
         background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         border-right: 1px solid var(--border);
     }
+    /* Flex the sidebar inner column so the status + sign-out + footer
+       cluster sits at the very bottom even when the rest of the sidebar
+       is short. Multiple selectors cover Streamlit DOM variants. */
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 3.5rem);
+    }
+    /* Push everything from `.sidebar-status` downward to the bottom edge. */
+    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-status),
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-status),
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-status) {
+        margin-top: auto;
+    }
+    /* The sign-out lives between status and footer — give it discreet spacing. */
+    .sidebar-signout-wrap { margin: .35rem 0 .25rem 0; }
 
     /* Hero */
     /* Hero — refined deep-indigo gradient (less candy, more "lab report") */
@@ -776,6 +794,14 @@ def render_diagnostics(
 
 def render_sidebar() -> tuple[str, FitConfig]:
     ml_ready = ML_DEFAULT_PTH.exists()
+    try:
+        auth = st.secrets.get("auth", {})
+    except StreamlitSecretNotFoundError:
+        auth = {}
+    show_sign_out = (
+        bool(auth.get("enabled", False))
+        and bool(st.session_state.get("authenticated", False))
+    )
     with st.sidebar:
         html(f"""
         <div class="sidebar-brand">
@@ -845,6 +871,21 @@ def render_sidebar() -> tuple[str, FitConfig]:
                 </div>
             </div>
         </div>
+        """)
+
+        if show_sign_out:
+            html('<div class="sidebar-signout-wrap"></div>')
+            if st.button(
+                "Sign out",
+                key="sidebar_sign_out_btn",
+                width="stretch",
+                type="secondary",
+            ):
+                st.session_state.pop("authenticated", None)
+                st.session_state.pop("username", None)
+                st.rerun()
+
+        html("""
         <div class="sidebar-footer">
             <div><b>OAS Studio · 2026</b></div>
             <div style="margin-top:4px;">
@@ -1474,9 +1515,8 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        if st.sidebar.button("Sign out", width="stretch"):
-            st.session_state.pop("authenticated", None)
-            st.rerun()
+        # Sign out is rendered inside render_sidebar() so it sits at the
+        # bottom of the sidebar next to the credits, not at the top.
         return
 
     render_hero(
