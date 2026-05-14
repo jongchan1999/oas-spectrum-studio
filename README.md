@@ -1,7 +1,7 @@
 <div align="center">
 
-  <a href="https://oas-spectrum-studio.streamlit.app">
-    <img src="docs/conference/poster-thumbnail.svg" alt="OAS Studio — 3-minute walkthrough"
+  <a href="https://github.com/jongchan1999/oas-spectrum-studio/raw/main/docs/demo/demo.mp4">
+    <img src="docs/conference/poster-thumbnail.svg" alt="▶ OAS Studio — click to watch the 3.5-minute walkthrough"
          width="720" />
   </a>
 
@@ -35,7 +35,7 @@
   </p>
 
   <p>
-    <a href="docs/demo/demo.mp4"><b>▶ Watch the demo (3 min 36 s, MP4, offline-playable)</b></a>
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/raw/main/docs/demo/demo.mp4"><b>▶ Watch the demo (3 min 36 s, MP4)</b></a>
     &nbsp;·&nbsp;
     <a href="https://oas-spectrum-studio.streamlit.app"><b>Try it live</b></a>
     &nbsp;·&nbsp;
@@ -45,14 +45,23 @@
 </div>
 
 <!--
-  Inline playback. GitHub renders the <video> element with native
-  controls when docs/demo/demo.mp4 is committed via Git LFS. Until then
-  this block degrades to a download link.
+  Inline playback in the rendered README.
+
+  The src points to GitHub's raw URL (not the relative repo path) so that
+  GitHub's LFS redirect resolves to the actual video bytes with a video/mp4
+  MIME type. A relative path like `docs/demo/demo.mp4` would return the LFS
+  pointer text and refuse to play.
+
+  Clicking the poster image above also takes the viewer straight to the
+  same raw URL, so even browsers that strip the <video> element fall back
+  to a direct view.
 -->
 <div align="center">
-  <video src="docs/demo/demo.mp4" controls width="720"
+  <video src="https://github.com/jongchan1999/oas-spectrum-studio/raw/main/docs/demo/demo.mp4"
+         controls width="720"
          poster="docs/conference/poster-thumbnail.svg">
-    Your browser does not support inline video — <a href="docs/demo/demo.mp4">download the MP4</a>.
+    Your browser does not support inline video —
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/raw/main/docs/demo/demo.mp4">click here to watch / download the MP4</a>.
   </video>
 </div>
 
