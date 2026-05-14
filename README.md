@@ -1,6 +1,6 @@
 <div align="center">
 
-  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0-demo/demo.mp4">
+  <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">
     <img src="docs/conference/poster-thumbnail.svg" alt="▶ OAS Studio — click to watch the 3.5-minute walkthrough"
          width="720" />
   </a>
@@ -35,7 +35,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0-demo/demo.mp4"><b>▶ Watch the demo (3 min 36 s, MP4)</b></a>
+    <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4"><b>▶ Watch the demo (3 min 36 s, MP4)</b></a>
     &nbsp;·&nbsp;
     <a href="https://oas-spectrum-studio.streamlit.app"><b>Try it live</b></a>
     &nbsp;·&nbsp;
@@ -57,11 +57,11 @@
   to a direct view.
 -->
 <div align="center">
-  <video src="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0-demo/demo.mp4"
+  <video src="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4"
          controls width="720"
          poster="docs/conference/poster-thumbnail.svg">
     Your browser does not support inline video —
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0-demo/demo.mp4">click here to watch / download the MP4</a>.
+    <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">click here to watch / download the MP4</a>.
   </video>
 </div>
 
