@@ -154,14 +154,42 @@ def inject_styles() -> None:
         background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         border-right: 1px solid var(--border);
     }
-    /* Sidebar content stacks naturally top-to-bottom; the brand sits at
-       the top, the bottom cluster (status pills + credits) is just the
-       last DOM element. No flex-column hack — keeps Sign out where
-       Streamlit puts it and avoids gaps. */
+    /* Sidebar: flex column so the bottom cluster (status + credits +
+       sign-out) sits at the viewport bottom regardless of how short the
+       upper controls are. The `:has(...)` selector targets ONLY the
+       single stElementContainer that wraps our .sidebar-bottom HTML, so
+       no other items get pushed around. */
+    [data-testid="stSidebarUserContent"] {
+        display: flex;
+        flex-direction: column;
+        min-height: calc(100vh - 4rem);
+    }
+    [data-testid="stSidebarUserContent"] > [data-testid="stElementContainer"]:has(> [data-testid="stMarkdownContainer"] > .sidebar-bottom) {
+        margin-top: auto;
+    }
     .sidebar-bottom {
-        margin-top: 1.25rem;
         padding-top: .9rem;
         border-top: 1px solid var(--border);
+    }
+    .sidebar-signout {
+        margin-top: .55rem;
+        text-align: center;
+    }
+    .sidebar-signout .stButton > button {
+        background: transparent !important;
+        color: var(--muted) !important;
+        border: 1px solid var(--border) !important;
+        box-shadow: none !important;
+        font-size: 0.72rem !important;
+        font-weight: 500 !important;
+        padding: 0.3rem 0.75rem !important;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .sidebar-signout .stButton > button:hover {
+        border-color: var(--border-strong) !important;
+        color: var(--ink) !important;
+        transform: none !important;
     }
 
     /* Hero */
@@ -785,6 +813,14 @@ def render_diagnostics(
 
 def render_sidebar() -> tuple[str, FitConfig]:
     ml_ready = ML_DEFAULT_PTH.exists()
+    try:
+        auth = st.secrets.get("auth", {})
+    except StreamlitSecretNotFoundError:
+        auth = {}
+    is_authenticated = (
+        bool(auth.get("enabled", False))
+        and bool(st.session_state.get("authenticated", False))
+    )
     with st.sidebar:
         html(f"""
         <div class="sidebar-brand">
@@ -868,6 +904,14 @@ def render_sidebar() -> tuple[str, FitConfig]:
             </div>
         </div>
         """)
+
+        if is_authenticated:
+            html('<div class="sidebar-signout">')
+            if st.button("Sign out", key="sb_signout_btn", width="stretch"):
+                st.session_state.pop("authenticated", None)
+                st.session_state.pop("username", None)
+                st.rerun()
+            html('</div>')
 
     return analysis_type, config
 
@@ -1484,9 +1528,8 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        if st.sidebar.button("Sign out", width="stretch"):
-            st.session_state.pop("authenticated", None)
-            st.rerun()
+        # Sign out is rendered at the bottom of the sidebar inside
+        # render_sidebar() to keep it from dominating the top.
         return
 
     render_hero(
