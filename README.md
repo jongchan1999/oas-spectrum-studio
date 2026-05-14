@@ -1,9 +1,12 @@
-<div align="center">
-
-  <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">
-    <img src="docs/conference/poster-thumbnail.svg" alt="▶ OAS Studio — click to watch the 3.5-minute walkthrough"
-         width="100%" />
+<p align="center">
+  <a href="https://oas-spectrum-studio.streamlit.app">
+    <img src="docs/conference/poster-thumbnail.svg"
+         alt="OAS Studio — click to open the live web app"
+         width="960" />
   </a>
+</p>
+
+<div align="center">
 
   <h1>OAS Spectrum Studio</h1>
 
