@@ -43,3 +43,6 @@ curated/
 !/260429/260429_analysis_OAS/Cross_sections_modified/
 /260429/260429_analysis_OAS/Cross_sections_modified/*
 !/260429/260429_analysis_OAS/Cross_sections_modified/*_ordered_cross_section.txt
+
+# Raw video export from CapCut (not part of the repo)
+/Demo_final.mp4
