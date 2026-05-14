@@ -483,7 +483,7 @@ def inject_styles() -> None:
     .consent-note strong { color: #312e81; }
 
     /* Sidebar brand + status panel */
-    .sidebar-brand { margin: 0 0 1rem 0; }
+    .sidebar-brand { margin: 0 0 0.3rem 0; }
     .brand-mark {
         display: flex; align-items: center; gap: .55rem;
         font-weight: 800; font-size: 1.22rem; color: var(--ink);
@@ -562,10 +562,9 @@ def inject_styles() -> None:
 
     .sidebar-footer {
         margin-top: 1rem;
-        padding-top: .75rem;
-        border-top: 1px solid var(--border);
+        padding-top: .1rem;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.7rem;
+        font-size: 0.78rem;
         color: var(--muted);
         opacity: 0.85;
         text-align: center;
@@ -584,6 +583,155 @@ def inject_styles() -> None:
         border-radius: 12px;
         padding: 0.5rem;
         box-shadow: var(--shadow);
+    }
+
+    /* ── Sidebar layout + bottom-pin + screencast polish (modern) ─── */
+
+    /* Sidebar becomes the positioning context for the absolutely-pinned
+       footer below. No internal scroll — the widget stack lives in the
+       reserved region above the footer (see padding-bottom). */
+    section[data-testid="stSidebar"] {
+        position: relative !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow: hidden !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+    /* Collapse the «« header band entirely — we never collapse the
+       sidebar during the demo, and removing it frees ~30 px for the
+       widget stack below. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        padding: 0 !important;
+        min-height: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+    /* The padding-bottom here reserves space for the absolutely-positioned
+       footer (≈ 120 px covers OAS Studio · APRIL Lab · PI · Dev block).
+       padding-top pushes the brand/mode/expander stack downward. */
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        height: 100% !important;
+        max-height: 100% !important;
+        overflow: hidden !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 120px !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stVerticalBlock"] {
+        display: flex !important;
+        flex-direction: column !important;
+        height: 100% !important;
+        max-height: 100% !important;
+        min-height: 0 !important;
+        overflow: hidden !important;
+        gap: 1.3rem !important;
+    }
+    /* Footer wrapper — ONLY the outer stElementContainer becomes absolute.
+       The inner wrappers stay in normal flow so the text-align:center on
+       .sidebar-footer actually centers the credits inside the full
+       sidebar width. */
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-footer) {
+        position: absolute !important;
+        bottom: 2.75rem !important;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 0.75rem !important;
+        z-index: 5 !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-footer) [data-testid="stMarkdownContainer"] {
+        width: 100% !important;
+    }
+    .sidebar-footer {
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* Soft, modern separator — fades out at both edges, replaces the
+       solid hr line that read as harsh against the surrounding widgets. */
+    section[data-testid="stSidebar"] hr {
+        border: none !important;
+        height: 1px !important;
+        background: linear-gradient(90deg,
+            transparent 0%,
+            rgba(15,23,42,0.10) 18%,
+            rgba(15,23,42,0.10) 82%,
+            transparent 100%) !important;
+        margin: 1.2rem 0 !important;
+        opacity: 1 !important;
+    }
+
+    /* Strip the default 1px border around the Advanced expander card so
+       it reads as part of the sidebar flow rather than a separate panel. */
+    section[data-testid="stSidebar"] [data-testid="stExpander"],
+    section[data-testid="stSidebar"] [data-testid="stExpander"] details,
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary,
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderToggle"] {
+        border: none !important;
+        box-shadow: none !important;
+        background: transparent !important;
+    }
+    /* Slightly tighter rhythm between the four sliders inside the
+       expander — keeps Streamlit's native slider look but recovers
+       enough vertical space that everything still fits. */
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stSlider"] {
+        margin-bottom: 0.3rem !important;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"] {
+        margin-bottom: 0.45rem !important;
+    }
+    /* Fallback: if a user's display is short enough that the expander
+       still won't fit, scroll inside the expander only — the rest of
+       the sidebar stays untouched (no scrollbar on the sidebar itself). */
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderDetails"],
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderContent"],
+    section[data-testid="stSidebar"] [data-testid="stExpander"] [role="region"] {
+        max-height: calc(100vh - 380px) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+
+    /* ML / cross-sections status box — modern spacing */
+    .sidebar-status {
+        margin: 0.35rem 0 !important;
+        padding: 0.55rem 0.7rem !important;
+    }
+    .status-row { padding: 0.18rem 0 !important; }
+
+    /* Method-picker radio — taller hit zones for clearer 1080p screencasts */
+    .stRadio > div[role="radiogroup"] {
+        gap: 0.4rem;
+        flex-wrap: wrap;
+    }
+    .stRadio > div[role="radiogroup"] > label {
+        padding: 0.3rem 0.7rem;
+        border-radius: 9px;
+        transition: background .15s ease;
+    }
+    .stRadio > div[role="radiogroup"] > label:hover {
+        background: rgba(99,102,241,.06);
+    }
+
+    /* Consent banner — slightly stronger shadow so the click target reads
+       at video distance during the Scene-5 pause */
+    .consent-card {
+        border-width: 1.5px;
+        box-shadow:
+            0 1px 2px rgba(168,85,247,.08),
+            0 10px 24px rgba(168,85,247,.10);
+    }
+    .consent-card-title { font-size: 1.0rem; }
+
+    /* Alert (success / info / warning) — premium padding + shadow */
+    [data-testid="stAlert"] {
+        border-radius: 12px !important;
+        padding: 0.85rem 1rem !important;
+        box-shadow:
+            0 1px 2px rgba(15,23,42,.04),
+            0 8px 24px rgba(15,23,42,.06) !important;
     }
     </style>
     """)
@@ -845,14 +993,21 @@ def render_sidebar() -> tuple[str, FitConfig]:
                 </div>
             </div>
         </div>
+        """)
+
+        # Footer is rendered in its own html() call so it gets a dedicated
+        # stElementContainer wrapper. CSS gives that wrapper margin-top:auto
+        # inside the flex-column stVerticalBlock, pinning the credits to
+        # the viewport bottom.
+        html("""
         <div class="sidebar-footer">
             <div><b>OAS Studio · 2026</b></div>
-            <div style="margin-top:4px;">
+            <div style="margin-top:2px;">
                 <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
                 &nbsp;·&nbsp;
                 <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
             </div>
-            <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
+            <div style="margin-top:3px; font-size:0.73rem; line-height:1.3;">
                 PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
                 Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
             </div>
@@ -1064,7 +1219,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
             )
         with col_b:
             meas_file = st.file_uploader(
-                "Measured spectrum It  (target time file)",
+                "Measured spectrum Iₜ  (target time file)",
                 type=["txt", "csv", "dat"],
                 key="single_meas",
             )
@@ -1110,7 +1265,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
     # ── Run handler ────────────────────────────────────────────
     if run_clicked:
         if ref_file is None or meas_file is None:
-            st.error("Both I₀ and It files are required before running.")
+            st.error("Both I₀ and Iₜ files are required before running.")
         else:
             try:
                 result_payload = run_single_analysis(
@@ -1139,7 +1294,7 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
     with st.container(border=True):
         render_step(2, "Results")
         if result is None:
-            st.info("Results appear here once an analysis run completes.")
+            st.info("📊  Results appear here once an analysis run completes.")
             return
 
         # Don't show stale ML results if user just switched to LR (and vice versa).
@@ -1338,7 +1493,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
     with st.container(border=True):
         render_step(2, "Results")
         if ts_payload is None:
-            st.info("Run the analysis to see the trend, summary, and per-frame validation.")
+            st.info("📈  Run the analysis to see the trend, summary, and per-frame validation.")
             return
         if ts_inputs.get("method") and ts_inputs["method"] != method:
             st.info(f"The current result was produced by *{ts_inputs['method']}*. Re-run to refresh.")

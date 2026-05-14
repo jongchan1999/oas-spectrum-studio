@@ -194,7 +194,7 @@ def make_intensity_preview(
             x=wavelengths,
             y=measured,
             mode="lines",
-            name="Measured It",
+            name="Measured Iₜ",
             line={"color": "#2563eb", "width": 2.0},
             hovertemplate="<b>Measured</b><br>%{x:.2f} nm<br>%{y:.3e}<extra></extra>",
         )
