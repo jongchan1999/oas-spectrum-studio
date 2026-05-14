@@ -1,11 +1,3 @@
-<p align="center">
-  <a href="https://oas-spectrum-studio.streamlit.app">
-    <img src="docs/conference/poster-thumbnail.svg"
-         alt="OAS Spectrum Studio — click to open the live web app"
-         width="960" />
-  </a>
-</p>
-
 <h1 align="center">OAS Spectrum Studio</h1>
 
 <p align="center">
@@ -31,6 +23,16 @@
   (3 min 36 s, MP4)
   &nbsp;·&nbsp;
   <a href="#citation"><b>Cite</b></a>
+</p>
+
+<br/>
+
+<p align="center">
+  <a href="https://oas-spectrum-studio.streamlit.app">
+    <img src="docs/conference/poster-thumbnail.svg"
+         alt="OAS Spectrum Studio — click to open the live web app"
+         width="960" />
+  </a>
 </p>
 
 <!-- Inline video — GitHub renders the native HTML5 player when the src is
