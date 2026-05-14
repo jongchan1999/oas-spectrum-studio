@@ -154,48 +154,6 @@ def inject_styles() -> None:
         background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         border-right: 1px solid var(--border);
     }
-    /* Sidebar: flex the inner column so the bottom cluster glues to the
-       viewport bottom. Stretch min-height aggressively across every
-       Streamlit wrapper variant so the auto-margin has space to absorb. */
-    section[data-testid="stSidebar"] > div:first-child,
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: 100vh !important;
-    }
-    /* Target ONLY the stElementContainer that directly wraps the
-       .sidebar-bottom html block — push it (and everything after it,
-       which is the tiny Sign out button) to the viewport bottom. */
-    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-bottom) {
-        margin-top: auto !important;
-    }
-    .sidebar-bottom {
-        padding-top: .9rem;
-        border-top: 1px solid var(--border);
-    }
-    /* Sign out — small, ghost-like, sits in the bottom margin under
-       credits. We target it by its unique key via Streamlit's element
-       container attribute; secondary buttons in the sidebar are reserved
-       for this button only. */
-    section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {
-        background: transparent !important;
-        color: var(--muted) !important;
-        border: 1px solid var(--border) !important;
-        box-shadow: none !important;
-        font-size: 0.7rem !important;
-        font-weight: 500 !important;
-        padding: 0.28rem 0.9rem !important;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        min-width: 0 !important;
-    }
-    section[data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
-        border-color: var(--border-strong) !important;
-        color: var(--ink) !important;
-        transform: none !important;
-        filter: none !important;
-    }
 
     /* Hero */
     /* Hero — refined deep-indigo gradient (less candy, more "lab report") */
@@ -564,7 +522,7 @@ def inject_styles() -> None:
     }
 
     .sidebar-status {
-        margin: 0 0 .65rem 0;
+        margin: .25rem 0 .75rem 0;
         padding: .55rem .65rem;
         border: 1px solid var(--border);
         border-radius: 11px;
@@ -603,8 +561,8 @@ def inject_styles() -> None:
     }
 
     .sidebar-footer {
-        margin-top: .5rem;
-        padding-top: .55rem;
+        margin-top: 1rem;
+        padding-top: .75rem;
         border-top: 1px solid var(--border);
         font-family: 'JetBrains Mono', monospace;
         font-size: 0.7rem;
@@ -818,14 +776,6 @@ def render_diagnostics(
 
 def render_sidebar() -> tuple[str, FitConfig]:
     ml_ready = ML_DEFAULT_PTH.exists()
-    try:
-        auth = st.secrets.get("auth", {})
-    except StreamlitSecretNotFoundError:
-        auth = {}
-    is_authenticated = (
-        bool(auth.get("enabled", False))
-        and bool(st.session_state.get("authenticated", False))
-    )
     with st.sidebar:
         html(f"""
         <div class="sidebar-brand">
@@ -877,51 +827,37 @@ def render_sidebar() -> tuple[str, FitConfig]:
             max_repeat=int(max_repeat),
         )
 
+        st.markdown("---")
         html(f"""
-        <div class="sidebar-bottom">
-            <div class="sidebar-status">
-                <div class="status-row">
-                    <span class="status-dot {'ok' if ml_ready else 'warn'}"></span>
-                    <div class="status-text">
-                        <div class="status-label">ML release</div>
-                        <div class="status-value">{ML_RELEASE_ID} · <code>{ML_DEFAULT_PTH.name}</code></div>
-                    </div>
-                </div>
-                <div class="status-row">
-                    <span class="status-dot ok"></span>
-                    <div class="status-text">
-                        <div class="status-label">Cross-sections</div>
-                        <div class="status-value">Cross_sections_modified · auto-detected</div>
-                    </div>
+        <div class="sidebar-status">
+            <div class="status-row">
+                <span class="status-dot {'ok' if ml_ready else 'warn'}"></span>
+                <div class="status-text">
+                    <div class="status-label">ML release</div>
+                    <div class="status-value">{ML_RELEASE_ID} · <code>{ML_DEFAULT_PTH.name}</code></div>
                 </div>
             </div>
-            <div class="sidebar-footer">
-                <div><b>OAS Studio · 2026</b></div>
-                <div style="margin-top:4px;">
-                    <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
-                    &nbsp;·&nbsp;
-                    <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
-                </div>
-                <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
-                    PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
-                    Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
+            <div class="status-row">
+                <span class="status-dot ok"></span>
+                <div class="status-text">
+                    <div class="status-label">Cross-sections</div>
+                    <div class="status-value">Cross_sections_modified · auto-detected</div>
                 </div>
             </div>
         </div>
+        <div class="sidebar-footer">
+            <div><b>OAS Studio · 2026</b></div>
+            <div style="margin-top:4px;">
+                <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
+                &nbsp;·&nbsp;
+                <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
+            </div>
+            <div style="margin-top:6px; font-size:0.66rem; line-height:1.5;">
+                PI <a href="mailto:sanghoopark@kaist.ac.kr">Sanghoo Park</a><br/>
+                Dev <a href="mailto:kimjongchan@kaist.ac.kr">Jongchan Kim</a>
+            </div>
+        </div>
         """)
-
-        if is_authenticated:
-            # Center the small ghost-style Sign out under the credits.
-            _l, _c, _r = st.columns([1, 2, 1])
-            with _c:
-                if st.button(
-                    "Sign out",
-                    key="sb_signout_btn",
-                    type="secondary",
-                ):
-                    st.session_state.pop("authenticated", None)
-                    st.session_state.pop("username", None)
-                    st.rerun()
 
     return analysis_type, config
 
@@ -1538,8 +1474,9 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        # Sign out is rendered at the bottom of the sidebar inside
-        # render_sidebar() to keep it from dominating the top.
+        if st.sidebar.button("Sign out", width="stretch"):
+            st.session_state.pop("authenticated", None)
+            st.rerun()
         return
 
     render_hero(
