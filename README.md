@@ -2,7 +2,7 @@
 
   <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">
     <img src="docs/conference/poster-thumbnail.svg" alt="▶ OAS Studio — click to watch the 3.5-minute walkthrough"
-         width="720" />
+         width="100%" />
   </a>
 
   <h1>OAS Spectrum Studio</h1>
@@ -58,7 +58,7 @@
 -->
 <div align="center">
   <video src="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4"
-         controls width="720"
+         controls width="100%"
          poster="docs/conference/poster-thumbnail.svg">
     Your browser does not support inline video —
     <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">click here to watch / download the MP4</a>.
