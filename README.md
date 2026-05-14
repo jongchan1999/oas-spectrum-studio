@@ -112,7 +112,7 @@ Then open <http://localhost:8501>. Two runtime assets must be present:
    (≈ 170 MB). Tracked via Git LFS, so it lands automatically after a
    `git lfs install && git clone`. If you cloned without LFS, fetch the
    actual blob with `git lfs pull`.
-2. **`260429/260429_analysis_OAS/Cross_sections_modified/*_ordered_cross_section.txt`**
+2. **`Cross_sections_modified/*_ordered_cross_section.txt`**
    — the 8 species cross-section files. Small text files, tracked normally.
 
 ## Expected file formats
@@ -231,8 +231,7 @@ assets/
 .streamlit/
   config.toml                   # Streamlit theme
   secrets.toml.example          # auth + cl secrets template
-260429/260429_analysis_OAS/
-  Cross_sections_modified/      # 8 species cross-section text files
+Cross_sections_modified/        # 8 species cross-section text files
 docs/                           # see "Documentation" above
 .github/workflows/curate.yml    # weekly curation worker (workflow_dispatch)
 ```

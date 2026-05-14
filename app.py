@@ -1694,7 +1694,7 @@ def main() -> None:
 
     analysis_type, config = render_sidebar()
 
-    selected_cross = discover_preferred_cross_section_dir(str(ROOT / "260429"))
+    selected_cross = discover_preferred_cross_section_dir(str(ROOT))
     if selected_cross is None:
         render_hero(
             title="Cross-section data missing",
@@ -1702,7 +1702,7 @@ def main() -> None:
             badge="Configuration error",
         )
         st.error(
-            "Place the following files under `260429/.../Cross_sections_modified/` and reload:\n\n"
+            "Place the following files under `Cross_sections_modified/` and reload:\n\n"
             "- HONO_ordered_cross_section.txt\n"
             "- HONO2_ordered_cross_section.txt\n"
             "- N2O4_ordered_cross_section.txt\n"

@@ -14,7 +14,7 @@ processes them the same way later.
 Usage:
 
     python scripts/seed_submissions.py \\
-        --data-dir "C:/Users/kimjo/spectroscopy/OAS tool/260429/.../Source_70_2" \\
+        --data-dir "C:/path/to/your/Source_70_2/" \\
         --reference Source_70_2_00000.txt \\
         --n 20 \\
         --user-id seeder
@@ -163,9 +163,10 @@ def main() -> int:
     parser.add_argument("--path-length-cm", type=float, default=15.0)
     parser.add_argument("--wave-low", type=float, default=210.0)
     parser.add_argument("--wave-high", type=float, default=400.0)
-    parser.add_argument("--cross-section-root", default=str(ROOT / "260429"),
+    parser.add_argument("--cross-section-root", default=str(ROOT),
                         help="Where to look for the 8 species cross-section "
-                             "files (default: repo's 260429 folder).")
+                             "files (default: repo root — finds "
+                             "Cross_sections_modified/ automatically).")
     parser.add_argument("--model-file", default=str(ROOT / "machine_learning" / "exp_4_epoch_3000.pth"),
                         help="ML checkpoint, only used when --method "
                              "machine_learning.")

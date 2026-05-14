@@ -26,7 +26,7 @@
 - [ ] The "ML checkpoint" sidebar status pill is **green** (= `.pth`
   resolved via LFS).
 - [ ] The "Cross-sections" sidebar pill is **green** (= 8 species files
-  found under `260429/.../Cross_sections_modified/`).
+  found under `Cross_sections_modified/`).
 - [ ] App URL is the slug you want long-term (default
   `oas-spectrum-studio.streamlit.app`). Renaming later breaks every link
   you've shared.

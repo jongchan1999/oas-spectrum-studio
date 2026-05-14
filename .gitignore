@@ -34,15 +34,10 @@ supabase/.branches/
 # Curation output (per-release packs are artifacts, not source).
 curated/
 
-# Ignore the 260429 measurement archive by default, but allow the 8 cross-section
-# text files the app needs at runtime. Patterns are walked downward — never
-# ignore a directory you want to descend into.
-/260429/*
-!/260429/260429_analysis_OAS/
-/260429/260429_analysis_OAS/*
-!/260429/260429_analysis_OAS/Cross_sections_modified/
-/260429/260429_analysis_OAS/Cross_sections_modified/*
-!/260429/260429_analysis_OAS/Cross_sections_modified/*_ordered_cross_section.txt
+# The Cross_sections_modified folder at the repo root carries the 8 reference
+# spectra the app needs at runtime. Anything else dropped into it is ignored.
+/Cross_sections_modified/*
+!/Cross_sections_modified/*_ordered_cross_section.txt
 
 # Raw video export from CapCut (not part of the repo)
 /Demo_final.mp4

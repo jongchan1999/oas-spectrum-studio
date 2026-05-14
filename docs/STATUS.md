@@ -40,7 +40,7 @@ These are the things you need to do (or can have me do) to take this from
    # …or fill the [cl] section of .streamlit/secrets.toml.
 
    python scripts\seed_submissions.py `
-     --data-dir "C:\Users\kimjo\spectroscopy\OAS tool\260429\260429_analysis_OAS-2\Source heating\70\2\Source_70_2" `
+     --data-dir "C:\path\to\your\Source_70_2" `
      --reference Source_70_2_00000.txt `
      --n 20 `
      --user-id seeder
