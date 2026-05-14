@@ -12,7 +12,6 @@
   <a href="https://oas-spectrum-studio.streamlit.app"><img alt="Live demo" src="https://img.shields.io/badge/live%20demo-streamlit-FF4B4B?logo=streamlit&logoColor=white"/></a>
   <a href="https://www.python.org/downloads/release/python-3110/"><img alt="Python 3.11" src="https://img.shields.io/badge/python-3.11-3776ab?logo=python&logoColor=white"/></a>
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-22c55e"/></a>
-  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/tag/v1.0-demo"><img alt="Release v1.0-demo" src="https://img.shields.io/badge/release-v1.0--demo-7c3aed"/></a>
   <a href="docs/CONTINUAL_LEARNING.md"><img alt="Continual learning" src="https://img.shields.io/badge/continual--learning-Phase%203-7c3aed"/></a>
 </p>
 
@@ -69,14 +68,16 @@ Each release credits its contributors.
 
 ## Quick start
 
+> This repository is private. Code access is by invite only; the live
+> app is access-controlled with per-person credentials. See **[Get
+> access](#get-access)** below before starting.
+
 ### Option 1 — use the live app
 
 No install. Open <https://oas-spectrum-studio.streamlit.app>, sign in with
-the credentials you received, and drag in your spectrum files. The current
-deployment is access-controlled to keep load predictable while we iterate
-on the model; ping the maintainers below for a login.
+the credentials you received, and drag in your spectrum files.
 
-### Option 2 — run locally
+### Option 2 — run locally (invited collaborators only)
 
 ```bash
 git lfs install                              # one-time per machine
@@ -220,6 +221,19 @@ Machine-readable: [`CITATION.cff`](CITATION.cff).
 [MIT](LICENSE) © 2026 Jongchan Kim &amp; APRIL Lab, KAIST. Permissive use,
 modification, and redistribution; please keep the copyright notice intact.
 
+## Get access
+
+This project is shared in a controlled way to keep deployment load
+predictable and the continual-learning corpus clean. Two access tiers:
+
+| You want to … | What we give you |
+|---|---|
+| **Use the deployed tool only** | A personal login for the live Streamlit app at <https://oas-spectrum-studio.streamlit.app>. No GitHub account needed. |
+| **Read or contribute to the code** | A **collaborator invite** to this private GitHub repository — send us your GitHub username and we add you in *Settings → Collaborators*. |
+
+Send a short note (who you are, which tier you want, and what you plan
+to do with it) to either of the maintainers below.
+
 ## Contact
 
 | Role | Person | Email |
@@ -227,8 +241,8 @@ modification, and redistribution; please keep the copyright notice intact.
 | **Principal investigator** | Sanghoo Park | <sanghoopark@kaist.ac.kr> |
 | **Maintainer / lead developer** | Jongchan Kim | <kimjongchan@kaist.ac.kr> |
 
-For bug reports, feature requests, or access to the deployed app, please
-[open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new).
+If you have access to the repo, [open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new)
+for bug reports or feature requests; otherwise just email.
 
 <p align="center">
   <sub>Developed at <a href="https://sites.google.com/view/plasmalab/">APRIL Lab</a>
