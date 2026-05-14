@@ -154,29 +154,13 @@ def inject_styles() -> None:
         background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         border-right: 1px solid var(--border);
     }
-    /* Flex the sidebar inner column so the status + sign-out + footer
-       cluster sits at the very bottom even when the rest of the sidebar
-       is short. Multiple selectors cover Streamlit DOM variants. */
-    section[data-testid="stSidebar"] > div:first-child,
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        display: flex;
-        flex-direction: column;
-        min-height: calc(100vh - 3.5rem);
-    }
-    /* Pin the combined .sidebar-bottom (status pills + credits) to the
-       bottom edge of the sidebar regardless of how much content precedes
-       it. We try both Streamlit wrapper styles + a direct rule on
-       .sidebar-bottom itself so at least one path always wins. */
-    section[data-testid="stSidebar"] > div:first-child > *:has(.sidebar-bottom),
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] > *:has(.sidebar-bottom),
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] > *:has(.sidebar-bottom),
-    section[data-testid="stSidebar"] [data-testid*="stMarkdown"]:has(.sidebar-bottom) {
-        margin-top: auto !important;
-    }
+    /* Sidebar content stacks naturally top-to-bottom; the brand sits at
+       the top, the bottom cluster (status pills + credits) is just the
+       last DOM element. No flex-column hack — keeps Sign out where
+       Streamlit puts it and avoids gaps. */
     .sidebar-bottom {
-        margin-top: auto;
-        padding-top: 1rem;
+        margin-top: 1.25rem;
+        padding-top: .9rem;
         border-top: 1px solid var(--border);
     }
 
