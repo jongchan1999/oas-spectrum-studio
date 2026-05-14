@@ -1,6 +1,6 @@
 # Project status — picked up where this leaves off
 
-> Updated 2026-05-12. Use this as the first thing to read when you resume.
+> Updated 2026-05-15. Use this as the first thing to read when you resume.
 
 ## Where things stand
 
@@ -8,12 +8,13 @@
 |---|---|---|
 | **Streamlit app (front)** | ✅ Live | `oas-spectrum-studio.streamlit.app`, allow-list login on |
 | **Linear regression pipeline** | ✅ Production | R² ≈ 0.92 on the Source_70_2 reference series |
-| **ML inference (current ResNet101)** | ✅ Live, ⚠ low accuracy | R² ≈ -0.5 on real measurements; expected and addressed by CL Phase 3 |
+| **ML inference (current ResNet101)** | ✅ Live, ⚠ low accuracy | Negative R² on real measurements; expected and addressed by CL Phase 3 |
 | **CL Phase 1 — submission endpoint** | ✅ Shipped & verified live | Supabase edge function `submit`, end-to-end tested |
 | **CL Phase 2 — curation worker** | ✅ Shipped, dry-run verified | `scripts/curate.py` + `.github/workflows/curate.yml` |
 | **CL Phase 3 — fine-tune + eval harness** | ✅ Shipped, awaiting data | `scripts/finetune.py` + `.github/workflows/finetune.yml`. Useful results need ≥ 20 submissions. |
-| **Demo video** | 📹 Script ready (caption-only, beginner-friendly), recording pending | See `docs/DEMO_VIDEO_SCRIPT.md` |
-| **Public release** | 📋 Checklist ready | See `docs/RELEASE_CHECKLIST.md` |
+| **Demo video** | ✅ Shipped — `docs/demo/demo.mp4` (3 min 36 s, 1080p, silent, LFS) | Walks through login → Single OAS LR → Time-series LR → ML + Supabase DB |
+| **Tag `v1.0-demo`** | ✅ Pushed | First public-ready release; matches the demo video |
+| **Public release** | 🟡 Repo ready, awaiting visibility flip | All sanity checks in `docs/RELEASE_CHECKLIST.md` pass; remaining step is GitHub Settings → Visibility → Public |
 
 ## Recommended pickup order
 

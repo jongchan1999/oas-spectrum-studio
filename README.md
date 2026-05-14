@@ -35,7 +35,7 @@
   </p>
 
   <p>
-    <a href="docs/demo/demo.mp4"><b>▶ Watch the 3-minute demo (MP4, offline-playable)</b></a>
+    <a href="docs/demo/demo.mp4"><b>▶ Watch the demo (3 min 36 s, MP4, offline-playable)</b></a>
     &nbsp;·&nbsp;
     <a href="https://oas-spectrum-studio.streamlit.app"><b>Try it live</b></a>
     &nbsp;·&nbsp;
@@ -82,10 +82,10 @@ swapping methods or scaling up to a 343-frame run requires no relearning.
 | | |
 |---|---|
 | **Live app** | <https://oas-spectrum-studio.streamlit.app> |
-| **Demo video** | [`docs/demo/demo.mp4`](docs/demo/demo.mp4) *(3 min, silent-screencast MP4, offline-playable)* |
+| **Demo video** | [`docs/demo/demo.mp4`](docs/demo/demo.mp4) *(3 min 36 s, silent-screencast MP4, 1080p, offline-playable)* |
 | **Tech** | Streamlit · scikit-learn · PyTorch (CPU) · Plotly · Supabase |
 | **Continual learning** | App → Supabase Edge Function → curation worker (GitHub Action) → fine-tune (next release) |
-| **Status** | Frontend live · CL Phases 1·2·3 all shipped · v1 fine-tune ran (gates blocked — overall RMSE −10 %, NO −19 %, but NO₃ regressed → baseline retained) |
+| **Release** | [`v1.0-demo`](https://github.com/jongchan1999/oas-spectrum-studio/releases/tag/v1.0-demo) — frontend live, CL Phases 1·2·3 all shipped, baseline ML checkpoint included |
 
 ## Run locally
 
