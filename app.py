@@ -1629,9 +1629,9 @@ def require_login_if_enabled() -> None:
         return
 
     if st.session_state.get("authenticated", False):
-        if st.sidebar.button("Sign out", width="stretch"):
-            st.session_state.pop("authenticated", None)
-            st.rerun()
+        # Sign-out button intentionally hidden — kept off the sidebar so
+        # the demo screencast doesn't expose the auth control. To sign
+        # out, close the browser tab or clear the session.
         return
 
     render_hero(
