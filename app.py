@@ -154,42 +154,47 @@ def inject_styles() -> None:
         background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
         border-right: 1px solid var(--border);
     }
-    /* Sidebar: flex column so the bottom cluster (status + credits +
-       sign-out) sits at the viewport bottom regardless of how short the
-       upper controls are. The `:has(...)` selector targets ONLY the
-       single stElementContainer that wraps our .sidebar-bottom HTML, so
-       no other items get pushed around. */
-    [data-testid="stSidebarUserContent"] {
-        display: flex;
-        flex-direction: column;
-        min-height: calc(100vh - 4rem);
+    /* Sidebar: flex the inner column so the bottom cluster glues to the
+       viewport bottom. Stretch min-height aggressively across every
+       Streamlit wrapper variant so the auto-margin has space to absorb. */
+    section[data-testid="stSidebar"] > div:first-child,
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"],
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 100vh !important;
     }
-    [data-testid="stSidebarUserContent"] > [data-testid="stElementContainer"]:has(> [data-testid="stMarkdownContainer"] > .sidebar-bottom) {
-        margin-top: auto;
+    /* Target ONLY the stElementContainer that directly wraps the
+       .sidebar-bottom html block — push it (and everything after it,
+       which is the tiny Sign out button) to the viewport bottom. */
+    section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-bottom) {
+        margin-top: auto !important;
     }
     .sidebar-bottom {
         padding-top: .9rem;
         border-top: 1px solid var(--border);
     }
-    .sidebar-signout {
-        margin-top: .55rem;
-        text-align: center;
-    }
-    .sidebar-signout .stButton > button {
+    /* Sign out — small, ghost-like, sits in the bottom margin under
+       credits. We target it by its unique key via Streamlit's element
+       container attribute; secondary buttons in the sidebar are reserved
+       for this button only. */
+    section[data-testid="stSidebar"] .stButton > button[kind="secondary"] {
         background: transparent !important;
         color: var(--muted) !important;
         border: 1px solid var(--border) !important;
         box-shadow: none !important;
-        font-size: 0.72rem !important;
+        font-size: 0.7rem !important;
         font-weight: 500 !important;
-        padding: 0.3rem 0.75rem !important;
-        letter-spacing: 0.04em;
+        padding: 0.28rem 0.9rem !important;
+        letter-spacing: 0.06em;
         text-transform: uppercase;
+        min-width: 0 !important;
     }
-    .sidebar-signout .stButton > button:hover {
+    section[data-testid="stSidebar"] .stButton > button[kind="secondary"]:hover {
         border-color: var(--border-strong) !important;
         color: var(--ink) !important;
         transform: none !important;
+        filter: none !important;
     }
 
     /* Hero */
@@ -906,12 +911,17 @@ def render_sidebar() -> tuple[str, FitConfig]:
         """)
 
         if is_authenticated:
-            html('<div class="sidebar-signout">')
-            if st.button("Sign out", key="sb_signout_btn", width="stretch"):
-                st.session_state.pop("authenticated", None)
-                st.session_state.pop("username", None)
-                st.rerun()
-            html('</div>')
+            # Center the small ghost-style Sign out under the credits.
+            _l, _c, _r = st.columns([1, 2, 1])
+            with _c:
+                if st.button(
+                    "Sign out",
+                    key="sb_signout_btn",
+                    type="secondary",
+                ):
+                    st.session_state.pop("authenticated", None)
+                    st.session_state.pop("username", None)
+                    st.rerun()
 
     return analysis_type, config
 
