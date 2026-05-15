@@ -48,11 +48,3 @@ Principal investigator:
 
 Maintainer / lead developer:
     Jongchan Kim <kimjongchan@kaist.ac.kr>
-
-──────────────────────────────────────────────────────────────────────────────
-NOTE (review before public announcement)
-
-If APRIL Lab / KAIST tech transfer requires a different licence (e.g.
-CC BY-NC for academic-only reuse, or a custom dual licence for a future
-spin-out), replace this file before publication and update
-docs/RELEASE_CHECKLIST.md accordingly.

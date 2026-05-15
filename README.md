@@ -2,10 +2,6 @@
 
 <p align="center">
   <b>A single-screen analyser for Optical Absorption Spectroscopy, grown by the community.</b>
-  <br/>
-  <sub>Developed at the
-  <a href="https://sites.google.com/view/plasmalab/"><b>APRIL Lab</b></a>
-  (Applied Plasma Research &amp; Innovation Lab), <a href="https://www.kaist.ac.kr/">KAIST</a>.</sub>
 </p>
 
 <p align="center">
@@ -18,8 +14,7 @@
 <p align="center">
   <a href="https://oas-spectrum-studio.streamlit.app"><b>▶ Try it live</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Watch the demo</b></a>
-  (3 min 36 s, MP4)
+  <a href="#demo"><b>Watch the 3-min demo</b></a>
   &nbsp;·&nbsp;
   <a href="#citation"><b>Cite</b></a>
 </p>
@@ -34,51 +29,52 @@
   </a>
 </p>
 
-<p align="center"><sub>▲ Click the poster to open the live app</sub></p>
+<h2 id="demo" align="center">Demo</h2>
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/b51b5d84-fe6b-4857-adcf-174dab1e2297"
          controls width="960"
          poster="docs/conference/poster-thumbnail.svg">
     Your browser does not support inline video —
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click here to download the MP4</a> (17 MB).
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click to download the MP4</a> (17 MB).
   </video>
 </div>
 
-<p align="center"><sub>▶ 3-min walkthrough · also available as <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">downloadable MP4</a></sub></p>
+<p align="center">
+  <sub>
+    Silent 3-min walkthrough · also available as a
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">downloadable MP4</a> (17 MB)
+  </sub>
+</p>
 
 ---
 
 ## What it does
 
 OAS Studio takes a measured optical absorption spectrum, separates it into
-the contributions of eight chemical species (HONO, HONO₂, N₂O₄, N₂O₅, NO,
-NO₂, NO₃, O₃), and returns calibrated number densities together with a
-validation overlay — typically in under a second.
+the contributions of **eight chemical species** (HONO, HONO₂, N₂O₄, N₂O₅,
+NO, NO₂, NO₃, O₃), and returns calibrated number densities together with
+a validation overlay — typically in under a second.
 
-Two analysis paths share the same UI, and the same UI scales from a single
-spectrum to a 343-frame time-series with no relearning:
+Two analysis paths share the same UI, and the same UI scales from a
+single spectrum to a 343-frame time-series with no relearning:
 
 | Path | Method | Best for |
 |---|---|---|
 | **Linear regression** | Positive NNLS + O₃-peak clipping + iterative false-positive suppression | Trusted labels, R² &gt; 0.92 on the reference series |
 | **Machine learning** | ResNet-101 over the OD curve rendered as an image | Quick first-pass on novel spectra; opted-in submissions feed the next checkpoint |
 
-Opt-in submissions flow into a Supabase-backed **continual-learning loop**
-(see [`docs/CONTINUAL_LEARNING.md`](docs/CONTINUAL_LEARNING.md)).
-Each release credits its contributors.
+Opt-in submissions flow into a Supabase-backed continual-learning loop
+([architecture](docs/CONTINUAL_LEARNING.md)). Each release credits its
+contributors.
 
 ## Quick start
 
-> The source code is MIT-licensed and public. The live Streamlit
-> deployment is access-controlled with per-person credentials so we can
-> keep the model load predictable while we iterate — request a login via
-> the **[Access](#access)** section below.
-
 ### Option 1 — use the live app
 
-No install. Open <https://oas-spectrum-studio.streamlit.app>, sign in with
-the credentials you received, and drag in your spectrum files.
+No install. Open <https://oas-spectrum-studio.streamlit.app>, sign in
+with the credentials you received (see **[Access](#access)** below), and
+drag in your spectrum files.
 
 ### Option 2 — run locally
 
@@ -92,18 +88,15 @@ streamlit run app.py
 
 Then open <http://localhost:8501>.
 
-Two runtime assets must be present (both are pulled automatically by
-`git clone` with LFS enabled):
+Two runtime assets are pulled automatically by `git clone` (LFS enabled):
 
-1. **`machine_learning/exp_4_epoch_3000.pth`** — the baseline ResNet-101
-   checkpoint (~170 MB, LFS-tracked).
-2. **`Cross_sections_modified/*_ordered_cross_section.txt`** — the 8 species
-   cross-section reference files. Plain text, tracked normally.
+- **`machine_learning/exp_4_epoch_3000.pth`** — baseline ResNet-101 checkpoint (~170 MB, LFS)
+- **`Cross_sections_modified/*_ordered_cross_section.txt`** — 8 species reference spectra (plain text)
 
 ## Input format
 
-A spectrum file is two columns (wavelength · intensity), whitespace / comma
-/ tab separated. SpectraSuite headers are recognised automatically.
+A spectrum file is two columns (wavelength · intensity), whitespace /
+comma / tab separated. SpectraSuite headers are recognised automatically.
 
 ```text
 wavelength_nm intensity
@@ -113,74 +106,56 @@ wavelength_nm intensity
 ```
 
 For a time-series upload, the file with the **lowest numeric suffix** is
-treated as I₀ (for example `Source_70_2_00000.txt`); the rest are processed
-in ascending suffix order.
+treated as I₀ (for example `Source_70_2_00000.txt`); the rest are
+processed in ascending suffix order.
 
-## Continual learning loop
+## Continual-learning loop
 
 | Phase | What it does | Where |
 |---|---|---|
 | **1. Submit** | Authenticated app POSTs each opted-in analysis to a Supabase Edge Function | [`supabase/`](supabase/) + [`oas_web/cl_submit.py`](oas_web/cl_submit.py) |
 | **2. Curate** | Weekly GitHub Action validates, dedupes, and packs new rows into a release pack | [`scripts/curate.py`](scripts/curate.py) + [`.github/workflows/curate.yml`](.github/workflows/curate.yml) |
-| **3. Fine-tune** | Same workflow re-trains the ResNet on the growing corpus and gates promotion on per-species RMSE deltas | [`machine_learning/finetune.py`](machine_learning/finetune.py) + [`.github/workflows/finetune.yml`](.github/workflows/finetune.yml) |
+| **3. Fine-tune** | Same workflow re-trains the ResNet on the growing corpus, gated on per-species RMSE deltas | [`machine_learning/finetune.py`](machine_learning/finetune.py) + [`.github/workflows/finetune.yml`](.github/workflows/finetune.yml) |
 
-End-to-end architecture, paper-track addendum, and release versioning are
-documented in [`docs/CONTINUAL_LEARNING.md`](docs/CONTINUAL_LEARNING.md).
-
-Spin up your own Supabase project by following
-[`supabase/README.md`](supabase/README.md).
+End-to-end architecture, paper-track addendum, and release versioning
+are documented in [`docs/CONTINUAL_LEARNING.md`](docs/CONTINUAL_LEARNING.md).
+To run your own Supabase backend, follow [`supabase/README.md`](supabase/README.md).
 
 ## Project layout
 
 ```text
-app.py                          Streamlit UI (single page, ~1.5k LOC)
+app.py                            Streamlit UI (single page, ~1.5k LOC)
 oas_web/
-  analysis.py                   OD computation + NNLS + refit heuristics
-  ml.py                         ResNet-101 inference (single + time-series)
-  plots.py                      Plotly figure factories
-  cl_submit.py                  Continual-learning submission client
-  curation.py                   Curation worker (validate / dedupe / pack)
+  analysis.py                     OD computation + NNLS + refit heuristics
+  ml.py                           ResNet-101 inference (single + time-series)
+  plots.py                        Plotly figure factories
+  cl_submit.py                    Continual-learning submission client
+  curation.py                     Curation worker (validate / dedupe / pack)
 machine_learning/
-  exp_4_epoch_3000.pth          Baseline checkpoint (LFS)
-  finetune.py / evaluate.py     Phase-3 fine-tune + eval harness
-  RegressionModel_linux.py      Reference training architecture
-  train_linux.py /              Legacy training pipeline kept for transparency
-  generate_linux.py /
-  inference_window.py
+  exp_4_epoch_3000.pth            Baseline checkpoint (LFS, ~170 MB)
+  finetune.py, evaluate.py        Phase-3 fine-tune + eval harness
+  RegressionModel_linux.py        Reference training architecture
+  train_linux.py, generate_linux.py, inference_window.py
+                                  Legacy training pipeline (kept for transparency)
 scripts/
-  curate.py                     CLI wrapper for the curation worker
-  finetune.py                   CLI wrapper for the fine-tune job
-  seed_submissions.py           Batch helper for seeding the corpus
+  curate.py                       CLI wrapper for the curation worker
+  finetune.py                     CLI wrapper for the fine-tune job
+  seed_submissions.py             Batch helper for seeding the corpus
 supabase/
-  schema.sql                    cl_submissions tables + RLS + GRANTs
-  functions/submit/index.ts     Edge function — validate, hash, store
-Cross_sections_modified/        8 species cross-section text files
-assets/                         Hero illustration
-docs/                           Continual-learning architecture, demo
-                                video script, release checklist, status
-                                notes, conference slide template
-.github/workflows/              curate.yml (weekly) + finetune.yml (manual)
+  schema.sql                      cl_submissions tables + RLS + GRANTs
+  functions/submit/index.ts       Edge function — validate, hash, store
+Cross_sections_modified/          8 species cross-section text files
+docs/
+  CONTINUAL_LEARNING.md           Backend architecture + paper-track addendum
+  conference/                     Slide / poster template + key visual
+assets/                           Hero illustration shown in the app
+.github/workflows/                curate.yml (weekly) + finetune.yml (manual)
 ```
-
-## Documentation
-
-- 🧪 [`docs/CONTINUAL_LEARNING.md`](docs/CONTINUAL_LEARNING.md) — backend
-  architecture, paper-track addendum, release versioning.
-- 🧭 [`docs/STATUS.md`](docs/STATUS.md) — what's shipped, what's pending,
-  how to resume.
-- 🚀 [`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md) — go-public
-  punch list.
-- 📹 [`docs/DEMO_VIDEO_SCRIPT.md`](docs/DEMO_VIDEO_SCRIPT.md) — shot-by-shot
-  script for the walkthrough video.
-- 🎓 [`docs/conference/`](docs/conference/) — slide / poster template +
-  key visual.
-- 🔒 [`DEPLOYMENT_PRIVATE.md`](DEPLOYMENT_PRIVATE.md) — private hosting
-  (Cloudflare Tunnel + Access).
 
 ## Citation
 
-Please cite **all three** entries below — the software entry alone is not
-sufficient.
+If you use OAS Studio in a publication, please cite **all three** entries —
+the software entry alone is not sufficient.
 
 1. **Methodology.** Kim, J., Huh, S.-C., Bae, J. H., Shin, S.-J., & Park, S.
    *Deep spectral deconvolution for image-based broadband spectral data
@@ -217,17 +192,18 @@ sufficient.
 
 </details>
 
-Machine-readable: [`CITATION.cff`](CITATION.cff).
+Machine-readable metadata: [`CITATION.cff`](CITATION.cff).
 
 ## License
 
-[MIT](LICENSE) © 2026 Jongchan Kim &amp; APRIL Lab, KAIST. Permissive use,
-modification, and redistribution; please keep the copyright notice intact.
+[MIT](LICENSE) © 2026 Jongchan Kim &amp; APRIL Lab, KAIST. Permissive
+use, modification, and redistribution; please keep the copyright notice
+intact.
 
 ## Access
 
 The source code is open and MIT-licensed — clone, fork, or run it
-locally without asking. The live Streamlit deployment is the only
+locally without asking. The **live Streamlit deployment** is the only
 gated piece: it uses per-person logins so we can keep the model load
 predictable while we iterate.
 
@@ -242,10 +218,13 @@ what you plan to analyse.
 | **Principal investigator** | Sanghoo Park | <sanghoopark@kaist.ac.kr> |
 | **Maintainer / lead developer** | Jongchan Kim | <kimjongchan@kaist.ac.kr> |
 
-Bug reports and feature requests: [open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new).
+Bug reports and feature requests:
+[open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new).
 
 <p align="center">
-  <sub>Developed at <a href="https://sites.google.com/view/plasmalab/">APRIL Lab</a>
-  (Applied Plasma Research &amp; Innovation Lab),
-  <a href="https://www.kaist.ac.kr/">KAIST</a> · 2026</sub>
+  <sub>
+    Developed at <a href="https://sites.google.com/view/plasmalab/"><b>APRIL Lab</b></a>
+    (Applied Plasma Research &amp; Innovation Lab),
+    <a href="https://www.kaist.ac.kr/">KAIST</a> · 2026
+  </sub>
 </p>
