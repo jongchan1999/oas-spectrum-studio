@@ -34,12 +34,18 @@
   </a>
 </p>
 
-<p align="center">
-  <sub>
-    ▲ Click the poster to open the live app &nbsp;·&nbsp;
-    ▶ <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Download the 3-min demo video</b></a> (MP4, 17 MB)
-  </sub>
-</p>
+<p align="center"><sub>▲ Click the poster to open the live app</sub></p>
+
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/b51b5d84-fe6b-4857-adcf-174dab1e2297"
+         controls width="960"
+         poster="docs/conference/poster-thumbnail.svg">
+    Your browser does not support inline video —
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click here to download the MP4</a> (17 MB).
+  </video>
+</div>
+
+<p align="center"><sub>▶ 3-min walkthrough · also available as <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">downloadable MP4</a></sub></p>
 
 ---
 
