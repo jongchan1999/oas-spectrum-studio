@@ -41,7 +41,6 @@
 </div>
 
 <br/>
-<br/>
 
 ## What it does
 
@@ -117,34 +116,16 @@ To run your own Supabase backend, follow [`supabase/README.md`](supabase/README.
 
 ## Project layout
 
-```text
-app.py                            Streamlit UI (single page, ~1.5k LOC)
-oas_web/
-  analysis.py                     OD computation + NNLS + refit heuristics
-  ml.py                           ResNet-101 inference (single + time-series)
-  plots.py                        Plotly figure factories
-  cl_submit.py                    Continual-learning submission client
-  curation.py                     Curation worker (validate / dedupe / pack)
-machine_learning/
-  exp_4_epoch_3000.pth            Baseline checkpoint (LFS, ~170 MB)
-  finetune.py, evaluate.py        Phase-3 fine-tune + eval harness
-  RegressionModel_linux.py        Reference training architecture
-  train_linux.py, generate_linux.py, inference_window.py
-                                  Legacy training pipeline (kept for transparency)
-scripts/
-  curate.py                       CLI wrapper for the curation worker
-  finetune.py                     CLI wrapper for the fine-tune job
-  seed_submissions.py             Batch helper for seeding the corpus
-supabase/
-  schema.sql                      cl_submissions tables + RLS + GRANTs
-  functions/submit/index.ts       Edge function — validate, hash, store
-Cross_sections_modified/          8 species cross-section text files
-docs/
-  CONTINUAL_LEARNING.md           Backend architecture + paper-track addendum
-  conference/                     Slide / poster template + key visual
-assets/                           Hero illustration shown in the app
-.github/workflows/                curate.yml (weekly) + finetune.yml (manual)
-```
+| Path | Purpose |
+|---|---|
+| [`app.py`](app.py) | Streamlit UI — single page, ~1.5k LOC |
+| [`oas_web/`](oas_web/) | Analysis core: OD computation, NNLS, ResNet inference, plot factories, submission + curation clients |
+| [`machine_learning/`](machine_learning/) | Baseline ResNet-101 checkpoint (LFS, ~170 MB) + Phase-3 fine-tune / eval harness + reference training architecture |
+| [`scripts/`](scripts/) | CLI wrappers for curation, fine-tune, and corpus-seeding jobs |
+| [`supabase/`](supabase/) | Edge function (validate / hash / store) + Postgres schema for opt-in submissions |
+| [`Cross_sections_modified/`](Cross_sections_modified/) | 8 species cross-section reference spectra |
+| [`docs/`](docs/) | Continual-learning architecture · conference slide / poster template |
+| [`.github/workflows/`](.github/workflows/) | `curate.yml` (weekly) · `finetune.yml` (manual dispatch) |
 
 ## Citation
 
