@@ -14,7 +14,7 @@
 <p align="center">
   <a href="https://oas-spectrum-studio.streamlit.app"><b>▶ Try it live</b></a>
   &nbsp;·&nbsp;
-  <a href="#demo"><b>Watch the 3-min demo</b></a>
+  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Watch the 3-min demo</b></a>
   &nbsp;·&nbsp;
   <a href="#citation"><b>Cite</b></a>
 </p>
@@ -29,7 +29,7 @@
   </a>
 </p>
 
-<h2 id="demo" align="center">Demo</h2>
+<br/>
 
 <div align="center">
   <video src="https://github.com/user-attachments/assets/b51b5d84-fe6b-4857-adcf-174dab1e2297"
@@ -40,14 +40,8 @@
   </video>
 </div>
 
-<p align="center">
-  <sub>
-    Silent 3-min walkthrough · also available as a
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">downloadable MP4</a> (17 MB)
-  </sub>
-</p>
-
----
+<br/>
+<br/>
 
 ## What it does
 
