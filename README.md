@@ -132,18 +132,18 @@ To run your own Supabase backend, follow [`supabase/README.md`](supabase/README.
 If you use OAS Studio in a publication, please cite **all three** entries —
 the software entry alone is not sufficient.
 
-1. **Methodology.** Kim, J., Huh, S.-C., Bae, J. H., Shin, S.-J., & Park, S.
-   *Deep spectral deconvolution for image-based broadband spectral data
-   analysis.* Sensors and Actuators B: Chemical (2026).
+1. **Methodology.** Kim, J. *et al.*
+   *Deep spectral deconvolution for image-based broadband spectral
+   data analysis.* Sensors and Actuators B: Chemical (2026).
    [doi:10.1016/j.snb.2025.139369](https://doi.org/10.1016/j.snb.2025.139369)
 
 2. **Plasma OAS context.** Huh, S.-C. *et al.*
    Plasma Sources Sci. Technol. **33**, 075007 (2024).
    [doi:10.1088/1361-6595/ad5ebb](https://doi.org/10.1088/1361-6595/ad5ebb)
 
-3. **Software.** Kim, J. & Park, S. *OAS Spectrum Studio — a Streamlit
-   analyser for optical absorption spectroscopy with a continual-learning
-   loop.* APRIL Lab, KAIST (2026).
+3. **Software.** Kim, J. & Park, S.
+   *OAS Spectrum Studio — a Streamlit analyser for optical absorption
+   spectroscopy with a continual-learning loop.* APRIL Lab, KAIST (2026).
    <https://github.com/jongchan1999/oas-spectrum-studio>
 
 <details>

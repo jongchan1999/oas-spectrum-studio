@@ -24,13 +24,13 @@
       <stop offset="100%" stop-color="#e0e7ff"/>
     </linearGradient>
     <style>
-      .label    { font: 600 26px Inter, system-ui, -apple-system, sans-serif; fill:#fde68a; letter-spacing:.08em; text-transform:uppercase;}
-      .title    { font: 900 120px Inter, system-ui, sans-serif; fill:#ffffff; letter-spacing:-0.025em; }
-      .subtitle { font: 600 38px Inter, system-ui, sans-serif; fill:#e9d5ff; }
-      .tag      { font: 600 22px Inter, system-ui, -apple-system, sans-serif; fill:#ffffff; letter-spacing:.06em; text-transform:uppercase; }
-      .url      { font: 600 30px Inter, system-ui, -apple-system, sans-serif; fill:#fef3c7; letter-spacing:.02em;}
-      .credit   { font: 600 24px Inter, sans-serif; fill:rgba(255,255,255,.78); }
-      .small    { font: 600 20px Inter, sans-serif; fill:rgba(255,255,255,.7); }
+      .label    { font: 600 23px Inter, system-ui, -apple-system, sans-serif; fill:#fde68a; letter-spacing:.08em; text-transform:uppercase;}
+      .title    { font: 900 104px Inter, system-ui, sans-serif; fill:#ffffff; letter-spacing:-0.025em; }
+      .subtitle { font: 600 34px Inter, system-ui, sans-serif; fill:#e9d5ff; }
+      .tag      { font: 600 20px Inter, system-ui, -apple-system, sans-serif; fill:#ffffff; letter-spacing:.06em; text-transform:uppercase; }
+      .url      { font: 600 27px Inter, system-ui, -apple-system, sans-serif; fill:#fef3c7; letter-spacing:.02em;}
+      .credit   { font: 600 22px Inter, sans-serif; fill:rgba(255,255,255,.78); }
+      .small    { font: 600 18px Inter, sans-serif; fill:rgba(255,255,255,.7); }
     </style>
   </defs>
 
@@ -52,7 +52,7 @@
   </g>
 
   <!-- Title -->
-  <text x="80" y="290" class="title">OAS Studio</text>
+  <text x="80" y="290" class="title">OAS studio</text>
   <text x="80" y="350" class="subtitle">Optical Absorption Spectroscopy</text>
   <text x="80" y="395" class="subtitle">— grown by the community.</text>
 
