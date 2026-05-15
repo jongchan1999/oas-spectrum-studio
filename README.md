@@ -34,16 +34,12 @@
   </a>
 </p>
 
-<!-- Inline video — GitHub renders the native HTML5 player when the src is
-     a user-attachments URL (the only host its README sanitiser whitelists). -->
-<div align="center">
-  <video src="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"
-         controls width="100%"
-         poster="docs/conference/poster-thumbnail.svg">
-    Your browser does not support inline video —
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click here to watch / download the MP4</a>.
-  </video>
-</div>
+<p align="center">
+  <sub>
+    ▲ Click the poster to open the live app &nbsp;·&nbsp;
+    ▶ <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Download the 3-min demo video</b></a> (MP4, 17 MB)
+  </sub>
+</p>
 
 ---
 
