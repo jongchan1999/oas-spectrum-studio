@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://oas-spectrum-studio.streamlit.app"><b>▶ Try it live</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4"><b>Watch the demo</b></a>
+  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Watch the demo</b></a>
   (3 min 36 s, MP4)
   &nbsp;·&nbsp;
   <a href="#citation"><b>Cite</b></a>
@@ -37,11 +37,11 @@
 <!-- Inline video — GitHub renders the native HTML5 player when the src is
      a user-attachments URL (the only host its README sanitiser whitelists). -->
 <div align="center">
-  <video src="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4"
+  <video src="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"
          controls width="100%"
          poster="docs/conference/poster-thumbnail.svg">
     Your browser does not support inline video —
-    <a href="https://github.com/user-attachments/assets/b7f9793d-b901-4f81-ac27-3edac7fee8c4">click here to watch / download the MP4</a>.
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click here to watch / download the MP4</a>.
   </video>
 </div>
 
