@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://oas-spectrum-studio.streamlit.app"><b>▶ Try it live</b></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/jongchan1999/oas-spectrum-studio-public/releases/download/v1.0/demo_under100mb.mp4"><b>Watch the demo</b></a>
+  <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"><b>Watch the demo</b></a>
   (3 min 36 s, MP4)
   &nbsp;·&nbsp;
   <a href="#citation"><b>Cite</b></a>
@@ -37,11 +37,11 @@
 <!-- Inline video — GitHub renders the native HTML5 player when the src is
      a user-attachments URL (the only host its README sanitiser whitelists). -->
 <div align="center">
-  <video src="https://github.com/jongchan1999/oas-spectrum-studio-public/releases/download/v1.0/demo_under100mb.mp4"
+  <video src="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4"
          controls width="100%"
          poster="docs/conference/poster-thumbnail.svg">
     Your browser does not support inline video —
-    <a href="https://github.com/jongchan1999/oas-spectrum-studio-public/releases/download/v1.0/demo_under100mb.mp4">click here to watch / download the MP4</a>.
+    <a href="https://github.com/jongchan1999/oas-spectrum-studio/releases/download/v1.0/demo_under100mb.mp4">click here to watch / download the MP4</a>.
   </video>
 </div>
 
@@ -68,16 +68,17 @@ Each release credits its contributors.
 
 ## Quick start
 
-> This repository is private. Code access is by invite only; the live
-> app is access-controlled with per-person credentials. See **[Get
-> access](#get-access)** below before starting.
+> The source code is MIT-licensed and public. The live Streamlit
+> deployment is access-controlled with per-person credentials so we can
+> keep the model load predictable while we iterate — request a login via
+> the **[Access](#access)** section below.
 
 ### Option 1 — use the live app
 
 No install. Open <https://oas-spectrum-studio.streamlit.app>, sign in with
 the credentials you received, and drag in your spectrum files.
 
-### Option 2 — run locally (invited collaborators only)
+### Option 2 — run locally
 
 ```bash
 git lfs install                              # one-time per machine
@@ -221,18 +222,16 @@ Machine-readable: [`CITATION.cff`](CITATION.cff).
 [MIT](LICENSE) © 2026 Jongchan Kim &amp; APRIL Lab, KAIST. Permissive use,
 modification, and redistribution; please keep the copyright notice intact.
 
-## Get access
+## Access
 
-This project is shared in a controlled way to keep deployment load
-predictable and the continual-learning corpus clean. Two access tiers:
+The source code is open and MIT-licensed — clone, fork, or run it
+locally without asking. The live Streamlit deployment is the only
+gated piece: it uses per-person logins so we can keep the model load
+predictable while we iterate.
 
-| You want to … | What we give you |
-|---|---|
-| **Use the deployed tool only** | A personal login for the live Streamlit app at <https://oas-spectrum-studio.streamlit.app>. No GitHub account needed. |
-| **Read or contribute to the code** | A **collaborator invite** to this private GitHub repository — send us your GitHub username and we add you in *Settings → Collaborators*. |
-
-Send a short note (who you are, which tier you want, and what you plan
-to do with it) to either of the maintainers below.
+To request a login for <https://oas-spectrum-studio.streamlit.app>,
+email one of the maintainers below with your name, affiliation, and
+what you plan to analyse.
 
 ## Contact
 
@@ -241,8 +240,7 @@ to do with it) to either of the maintainers below.
 | **Principal investigator** | Sanghoo Park | <sanghoopark@kaist.ac.kr> |
 | **Maintainer / lead developer** | Jongchan Kim | <kimjongchan@kaist.ac.kr> |
 
-If you have access to the repo, [open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new)
-for bug reports or feature requests; otherwise just email.
+Bug reports and feature requests: [open an issue](https://github.com/jongchan1999/oas-spectrum-studio/issues/new).
 
 <p align="center">
   <sub>Developed at <a href="https://sites.google.com/view/plasmalab/">APRIL Lab</a>
