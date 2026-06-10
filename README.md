@@ -49,17 +49,39 @@ the contributions of **eight chemical species** (HONO, HONO₂, N₂O₄, N₂O�
 NO, NO₂, NO₃, O₃), and returns calibrated number densities together with
 a validation overlay — typically in under a second.
 
-Two analysis paths share the same UI, and the same UI scales from a
+Two analysis engines run under the hood, and the same UI scales from a
 single spectrum to a 343-frame time-series with no relearning:
 
-| Path | Method | Best for |
+| Engine | Method | Strength |
 |---|---|---|
 | **Linear regression** | Positive NNLS + O₃-peak clipping + iterative false-positive suppression | Trusted labels, R² &gt; 0.92 on the reference series |
-| **Machine learning** | ResNet-101 over the OD curve rendered as an image | Quick first-pass on novel spectra; opted-in submissions feed the next checkpoint |
+| **Machine learning** | ResNet-101 over the OD curve rendered as an image | Generalises to novel spectra; opted-in submissions feed the next checkpoint |
+
+As of **v1.2 you no longer pick the engine.** Pressing **Run** executes
+both and surfaces whichever reconstruction scores the higher R² — the
+accuracy metrics lead, and the engine that produced them is shown as a
+small caption. If no ML checkpoint is present (or it fails to load) the
+app falls back to linear regression automatically.
 
 Opt-in submissions flow into a Supabase-backed continual-learning loop
 ([architecture](docs/CONTINUAL_LEARNING.md)). Each release credits its
 contributors.
+
+### What's new in v1.2
+
+- **Automatic engine selection** — no more Linear-regression / Machine-learning
+  toggle. Run once; the higher-R² reconstruction wins (single and time-series).
+- **Consent on every run** — a single agreement checkbox now gates *both*
+  paths. Checking it stores your raw spectra (reference I₀ + measured Iₜ) and
+  results (number densities, metrics, fit settings) in the corpus on analyse.
+- **Raw-data persistence** — the submission payload + Supabase schema gained
+  `raw_reference` / `raw_measured` / `fit_config` columns (schema v2). See
+  [`supabase/migrations/0001_v1_2_raw_data.sql`](supabase/migrations/0001_v1_2_raw_data.sql).
+- **Institutional branding** — the hero illustration is replaced by linked
+  [KAIST](https://www.kaist.ac.kr/kr/) and [APRIL Lab](https://april.kaist.ac.kr/)
+  logos in the sidebar.
+- **Reset to defaults** — the Advanced fit configuration expander gained a
+  one-click reset for all four sliders.
 
 ## Quick start
 
@@ -106,7 +128,7 @@ processed in ascending suffix order.
 
 | Phase | What it does | Where |
 |---|---|---|
-| **1. Submit** | Authenticated app POSTs each opted-in analysis to a Supabase Edge Function | [`supabase/`](supabase/) + [`oas_web/cl_submit.py`](oas_web/cl_submit.py) |
+| **1. Submit** | On analyse, the app POSTs each opted-in run — raw spectra + results + fit settings (schema v2) — to a Supabase Edge Function | [`supabase/`](supabase/) + [`oas_web/cl_submit.py`](oas_web/cl_submit.py) |
 | **2. Curate** | Weekly GitHub Action validates, dedupes, and packs new rows into a release pack | [`scripts/curate.py`](scripts/curate.py) + [`.github/workflows/curate.yml`](.github/workflows/curate.yml) |
 | **3. Fine-tune** | Same workflow re-trains the ResNet on the growing corpus, gated on per-species RMSE deltas | [`machine_learning/finetune.py`](machine_learning/finetune.py) + [`.github/workflows/finetune.yml`](.github/workflows/finetune.yml) |
 
