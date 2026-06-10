@@ -38,8 +38,23 @@ create table if not exists public.cl_submissions (
     wavelength_min_nm   real          not null,
     wavelength_max_nm   real          not null,
     n_points            integer       not null check (n_points >= 10),
-    ml_r2               real,                              -- nullable: only set for ML submissions
+    ml_r2               real,                              -- legacy: kept for v1 back-compat
     ml_rmse             real,
+
+    -- Reconstruction metrics (schema v2 — populated for every submission,
+    -- regardless of the auto-selected method)
+    recon_r2            real,
+    recon_rmse          real,
+    recon_mae           real,
+    recon_mape          real,
+    selected_method     text,                              -- which method won the R² tie-break
+    fit_config          jsonb,                             -- slider settings used for this run
+
+    -- Raw, untouched input traces (schema v2). Each is
+    -- {"wavelength_nm": [...], "intensity": [...]}. The full payload also
+    -- lives in Storage; these columns make the raw inputs queryable.
+    raw_reference       jsonb,
+    raw_measured        jsonb,
 
     -- Curation lifecycle
     status              text          not null default 'raw'

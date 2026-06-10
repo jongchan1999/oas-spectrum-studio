@@ -5,7 +5,9 @@ side to accept consented continual-learning samples:
 
 ```
 supabase/
-├── schema.sql                        # one-shot SQL migration
+├── schema.sql                        # full schema (fresh installs)
+├── migrations/
+│   └── 0001_v1_2_raw_data.sql        # v2: raw-data + full-metrics columns
 └── functions/submit/
     ├── index.ts                      # Deno edge function
     └── deno.json                     # local-dev task config
@@ -39,6 +41,13 @@ This creates:
 - `public.cl_submissions`   — the public corpus index (RLS on, default-deny)
 - `public.cl_submission_species` — per-species number-density rows
 - `owner_only.filename_map` — owner-only plaintext filename map
+
+`schema.sql` already includes the v1.2 (schema-v2) columns. **If you stood
+up the DB before v1.2**, apply the migration instead of re-pasting the
+whole schema: run [`migrations/0001_v1_2_raw_data.sql`](./migrations/0001_v1_2_raw_data.sql)
+in the SQL Editor (it is idempotent — `ADD COLUMN IF NOT EXISTS`). It adds
+`raw_reference`, `raw_measured`, `fit_config`, `selected_method`, and the
+`recon_*` metric columns, then redeploy the edge function (step 5).
 
 ### 3. Create the Storage bucket
 
@@ -101,11 +110,17 @@ endpoint = "https://<project-ref>.functions.supabase.co/submit"
 anon_key = "eyJhbGciOiJI...."   # anon public key
 ```
 
-Restart / reboot the Streamlit app. The "📡  Submit this analysis to the
-global model" button appears in the **Downloads** tab of the ML pipeline
-once the user opts in via the consent banner.
+Restart / reboot the Streamlit app. From v1.2, once the user checks the
+consent box and presses **Run**, the app submits automatically — the raw
+spectra + results are persisted on analyse, and the Results card reports
+the submission id (or a graceful caption when the endpoint is unset).
 
 ## Testing the endpoint manually
+
+The `schema_version: 1` payload below still validates. Schema v2 (what the
+v1.2 app sends) additionally accepts an optional `raw_spectrum` block —
+`{ "reference": {wavelength_nm, intensity}, "measured": {…} }` — and
+`client.fit_config` / `predictions.metrics`.
 
 ```bash
 curl -X POST "https://<project-ref>.functions.supabase.co/submit" \
