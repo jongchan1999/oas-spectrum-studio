@@ -1,6 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" viewBox="0 0 180 56" role="img" aria-label="KAIST (placeholder logo)">
-  <rect x="0.5" y="0.5" width="179" height="55" rx="11" fill="#ffffff" stroke="#004191" stroke-width="1.5"/>
-  <text x="20" y="36" font-family="Inter, 'Segoe UI', system-ui, sans-serif" font-size="26" font-weight="800" letter-spacing="2" fill="#004191">KAIST</text>
-  <circle cx="150" cy="28" r="9" fill="none" stroke="#e30613" stroke-width="2.5"/>
-  <text x="150" y="33" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="800" fill="#e30613">K</text>
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 27.2.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" id="레이어_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px"
+	 y="0px" viewBox="0 0 894.1 255.1" style="enable-background:new 0 0 894.1 255.1;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#1F4899;}
+	.st1{fill:url(#SVGID_1_);}
+</style>
+<path class="st0" d="M440.6,157.5h41.9V0h-41.9V157.5z M664.3,0v32.8H717v124.7h41.8V32.8h52.7V0H664.3z M606,62.3h-35
+	c-9.3,0-16.8-3.8-16.8-14.8c0-10.9,7.5-14.8,16.8-14.8h75.2V0h-80.2c-29.9,0-54.2,17.3-54.2,47.6c0,30.3,24.3,47.6,54.2,47.6h36
+	c9.3,0,16.8,3.8,16.8,14.8c0,10.9-7.5,14.7-16.8,14.7h-84.4v32.8H606c29.9,0,54.2-17.3,54.2-47.6C660.2,79.7,636,62.3,606,62.3
+	 M313.2,0L254,141.7l-56.4-63L268.1,0h-47.8l-66.9,74.8V0h-41.9v157.5h41.9V82.7l66.9,74.8h69.6l47.9-118.8l34.8,87.3h-55.3
+	l13.2,31.5h97.8L362.6,0H313.2z"/>
+<linearGradient id="SVGID_1_" gradientUnits="userSpaceOnUse" x1="148.7751" y1="553.9963" x2="149.7437" y2="553.9963" gradientTransform="matrix(923.0769 0 0 923.0769 -137316.3594 -511157.5312)">
+	<stop  offset="0" style="stop-color:#69C5F0"/>
+	<stop  offset="5.000000e-02" style="stop-color:#69C5F0"/>
+	<stop  offset="0.3816" style="stop-color:#3F88D0"/>
+	<stop  offset="0.5" style="stop-color:#3F88D0"/>
+	<stop  offset="0.7316" style="stop-color:#2C61B5"/>
+	<stop  offset="0.95" style="stop-color:#2C61B5"/>
+	<stop  offset="1" style="stop-color:#2C61B5"/>
+</linearGradient>
+<path class="st1" d="M14.5,223.6c146,20.8,295.3,31.5,447,31.5c151.7,0,301-10.7,447-31.5c-146-20.7-295.3-31.5-447-31.5
+	C309.8,192.1,160.5,202.9,14.5,223.6"/>
 </svg>
