@@ -888,10 +888,15 @@ def render_metric_row(metrics: dict[str, float]) -> None:
 
 def render_chemical_table(species: list[str], values: np.ndarray) -> None:
     detected = [bool(v > 0) for v in values]
+    # Number densities routinely exceed JavaScript's Number.MAX_SAFE_INTEGER
+    # (~9.007e15 — e.g. NO/NO2 at ~1e16+), and st.column_config.NumberColumn's
+    # client-side "%.3e" formatter falls back to the raw integer for those.
+    # Pre-format every value in Python and render as text so all rows show a
+    # consistent scientific notation regardless of magnitude.
     frame = pd.DataFrame({
         "Species": species,
         "Detected": ["Yes" if d else "No" for d in detected],
-        "Number density": [float(v) for v in values],
+        "Number density": [f"{float(v):.3e}" for v in values],
         "Unit": ["molec/cm³"] * len(species),
     })
     st.dataframe(
@@ -901,9 +906,8 @@ def render_chemical_table(species: list[str], values: np.ndarray) -> None:
         column_config={
             "Species": st.column_config.TextColumn("Species", width="small"),
             "Detected": st.column_config.TextColumn("Detected", width="small"),
-            "Number density": st.column_config.NumberColumn(
+            "Number density": st.column_config.TextColumn(
                 "Number density (molec/cm³)",
-                format="%.3e",
             ),
             "Unit": st.column_config.TextColumn("Unit", width="small"),
         },
@@ -942,19 +946,34 @@ def render_diagnostics(
 # ────────────────────────────────────────────────────────────────────────────
 
 
-_FIT_CONFIG_KEYS = (
-    "cfg_min_fit_fraction",
-    "cfg_od_avg_coeff",
-    "cfg_od_clip_threshold",
-    "cfg_max_repeat",
-)
+# Factory defaults for the four advanced sliders, keyed by their session_state
+# key. The sliders are created WITHOUT a `value=` argument and read their value
+# straight from session_state — so the reset callback only has to write these
+# back. (The older "pass value= + pop the key" trick reliably resets state but
+# does not always re-sync the slider thumb in a live browser, which is the bug
+# this replaces.)
+_FIT_CONFIG_DEFAULTS: dict[str, float | int] = {
+    "cfg_min_fit_fraction": float(DEFAULT_MIN_FIT_FRACTION),
+    "cfg_od_avg_coeff": float(DEFAULT_OD_AVG_COEFF),
+    "cfg_od_clip_threshold": float(DEFAULT_OD_CLIP_THRESHOLD),
+    "cfg_max_repeat": int(DEFAULT_MAX_REPEAT),
+}
+
+
+def _seed_fit_config_defaults() -> None:
+    """Seed each slider's session_state key once, before the widgets render."""
+    for key, value in _FIT_CONFIG_DEFAULTS.items():
+        st.session_state.setdefault(key, value)
 
 
 def _reset_fit_config_defaults() -> None:
-    """on_click callback: drop the four slider keys so they fall back to
-    their `value=` defaults on the rerun that Streamlit triggers next."""
-    for key in _FIT_CONFIG_KEYS:
-        st.session_state.pop(key, None)
+    """on_click callback: write the factory defaults back into session_state.
+
+    Runs before the rerun that re-renders the sliders, so the widgets pick the
+    default straight up — and because the value lives in session_state (not a
+    `value=` arg) the thumb position updates too."""
+    for key, value in _FIT_CONFIG_DEFAULTS.items():
+        st.session_state[key] = value
 
 
 def render_sidebar() -> tuple[str, FitConfig]:
@@ -979,38 +998,36 @@ def render_sidebar() -> tuple[str, FitConfig]:
         )
 
         st.markdown("---")
+        _seed_fit_config_defaults()
         with st.expander("Advanced fit configuration", expanded=False):
             st.caption(
                 "Tune the heuristics that drive O₃ clipping and the iterative refit. "
                 "These apply to the linear regression path."
             )
             min_fit_fraction = st.slider(
-                "Min fit fraction", 0.0, 0.5, float(DEFAULT_MIN_FIT_FRACTION), 0.01,
+                "Min fit fraction", 0.0, 0.5, step=0.01,
                 key="cfg_min_fit_fraction",
                 help="Minimum ratio of fit points to total points. Below this, the fit returns zeros.",
             )
             od_avg_coeff = st.slider(
-                "False-positive suppression coefficient", 0.5, 4.0,
-                float(DEFAULT_OD_AVG_COEFF), 0.05,
+                "False-positive suppression coefficient", 0.5, 4.0, step=0.05,
                 key="cfg_od_avg_coeff",
                 help=("In the 350–370 nm window, drop a species column whose reconstructed average "
                       "exceeds this multiple of the total OD average."),
             )
             od_clip_threshold = st.slider(
-                "OD clipping threshold", 0.05, 0.6,
-                float(DEFAULT_OD_CLIP_THRESHOLD), 0.01,
+                "OD clipping threshold", 0.05, 0.6, step=0.01,
                 key="cfg_od_clip_threshold",
                 help="Noise threshold for O₃ peak based positive clipping.",
             )
             max_repeat = st.slider(
-                "Max refit iterations", 0, 10, int(DEFAULT_MAX_REPEAT), 1,
+                "Max refit iterations", 0, 10, step=1,
                 key="cfg_max_repeat",
             )
 
-            # Reset clears the slider state keys; on the rerun that follows,
-            # each slider re-initialises to its `value=` default. The pop must
-            # happen in the on_click callback (before the widgets are
-            # re-instantiated) for the reset to actually take effect.
+            # Reset writes the factory defaults back into session_state (see
+            # _reset_fit_config_defaults). The sliders read from session_state,
+            # so both the values and the thumb positions revert on rerun.
             st.button(
                 "↺  Reset to defaults",
                 key="cfg_reset_btn",
