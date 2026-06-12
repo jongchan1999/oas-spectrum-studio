@@ -584,10 +584,10 @@ def inject_styles() -> None:
     }
 
     .sidebar-footer {
-        margin-top: 1rem;
+        margin-top: 0;            /* the wrapper's margin-top:auto already pins it */
         padding-top: .1rem;
         font-family: 'JetBrains Mono', monospace;
-        font-size: 0.78rem;
+        font-size: 0.76rem;
         color: var(--muted);
         opacity: 0.85;
         text-align: center;
@@ -606,7 +606,7 @@ def inject_styles() -> None:
         justify-content: center;
         gap: 0.6rem;
         flex-wrap: wrap;
-        margin: 0.2rem 0 0.55rem 0;
+        margin: 0 0 0.4rem 0;
     }
     .partner-logos a {
         display: inline-flex;
@@ -651,62 +651,59 @@ def inject_styles() -> None:
         box-shadow: var(--shadow);
     }
 
-    /* ── Sidebar layout + bottom-pin + screencast polish (modern) ─── */
+    /* ── Sidebar layout + bottom-pinned footer (robust flex flow) ─────
+       The whole widget stack is a flex column at least as tall as the
+       viewport. The footer is the last child and gets margin-top:auto, so
+       it is pushed flush to the bottom when the stack is short (Advanced
+       expander collapsed) and sits at the natural bottom — with the sidebar
+       scrolling to reach it — when the stack is tall (expander expanded).
+       No fixed heights, no absolute positioning, no space reservation. */
 
-    /* Sidebar becomes the positioning context for the absolutely-pinned
-       footer below. No internal scroll — the widget stack lives in the
-       reserved region above the footer (see padding-bottom). */
-    section[data-testid="stSidebar"] {
-        position: relative !important;
-    }
+    /* Scroll container: exactly one viewport tall, scrolls when content
+       (expanded expander) overflows. */
     section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         height: 100vh !important;
         max-height: 100vh !important;
-        overflow: hidden !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
         padding-top: 0 !important;
         padding-bottom: 0 !important;
     }
-    /* Collapse the «« header band entirely — we never collapse the
-       sidebar during the demo, and removing it frees ~30 px for the
-       widget stack below. */
+    /* Collapse the «« header band entirely to reclaim vertical space.
+       margin:0 is essential — the default 16px bottom margin would otherwise
+       shove the whole stack down and push the footer below the viewport. */
     section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
         padding: 0 !important;
+        margin: 0 !important;
         min-height: 0 !important;
         height: 0 !important;
         overflow: hidden !important;
     }
-    /* The padding-bottom here reserves space for the absolutely-positioned
-       footer (≈ 120 px covers OAS Studio · APRIL Lab · PI · Dev block).
-       padding-top pushes the brand/mode/expander stack downward. */
+    /* User content holds the padding; the widget block below carries the
+       full-height floor. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        height: 100% !important;
-        max-height: 100% !important;
-        overflow: hidden !important;
+        box-sizing: border-box !important;
         padding-top: 1.5rem !important;
-        padding-bottom: 168px !important;
+        padding-bottom: 0.6rem !important;
     }
+    /* The widget block is a flex column whose minimum height equals the
+       viewport minus the user-content padding (1.5rem + 0.6rem = 2.1rem).
+       That makes it exactly fill the sidebar when content is short — so the
+       footer's margin-top:auto pins it to the very bottom with no clipping —
+       and grow past it (the sidebar scrolls) when the expander is open. */
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] [data-testid="stVerticalBlock"] {
         display: flex !important;
         flex-direction: column !important;
-        height: 100% !important;
-        max-height: 100% !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
+        min-height: calc(100vh - 2.8rem) !important;
         gap: 1.3rem !important;
     }
-    /* Footer wrapper — ONLY the outer stElementContainer becomes absolute.
-       The inner wrappers stay in normal flow so the text-align:center on
-       .sidebar-footer actually centers the credits inside the full
-       sidebar width. */
+    /* Footer wrapper — pushed to the bottom of the flex column. The auto top
+       margin absorbs all free space above it. */
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-footer) {
-        position: absolute !important;
-        bottom: 2.75rem !important;
-        left: 0 !important;
-        right: 0 !important;
+        margin-top: auto !important;
+        margin-bottom: 0 !important;
         width: 100% !important;
-        margin: 0 !important;
         padding: 0 0.75rem !important;
-        z-index: 5 !important;
     }
     section[data-testid="stSidebar"] [data-testid="stElementContainer"]:has(.sidebar-footer) [data-testid="stMarkdownContainer"] {
         width: 100% !important;
@@ -748,16 +745,6 @@ def inject_styles() -> None:
     }
     section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stCaptionContainer"] {
         margin-bottom: 0.45rem !important;
-    }
-    /* Fallback: if a user's display is short enough that the expander
-       still won't fit, scroll inside the expander only — the rest of
-       the sidebar stays untouched (no scrollbar on the sidebar itself). */
-    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderDetails"],
-    section[data-testid="stSidebar"] [data-testid="stExpander"] [data-testid="stExpanderContent"],
-    section[data-testid="stSidebar"] [data-testid="stExpander"] [role="region"] {
-        max-height: calc(100vh - 380px) !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
     }
 
     /* ML / cross-sections status box — modern spacing */
@@ -1072,7 +1059,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
         <div class="sidebar-footer">
             {_partner_logos_html()}
             <div><b>OAS Studio · 2026</b></div>
-            <div style="margin-top:2px;">
+            <div style="margin-top:2px; white-space:nowrap; font-size:0.72rem;">
                 <a href="https://sites.google.com/view/plasmalab/" target="_blank" rel="noopener">APRIL Lab · KAIST</a>
                 &nbsp;·&nbsp;
                 <a href="https://github.com/jongchan1999/oas-spectrum-studio" target="_blank" rel="noopener">github ↗</a>
