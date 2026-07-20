@@ -13,6 +13,9 @@ from streamlit.errors import StreamlitSecretNotFoundError
 from oas_web.analysis import (
     DEFAULT_MAX_REPEAT,
     DEFAULT_MIN_FIT_FRACTION,
+    DEFAULT_NO_O3_DENSITY_THRESHOLD,
+    DEFAULT_NO_O3_RATIO,
+    DEFAULT_NO_O3_RULE,
     DEFAULT_OD_AVG_COEFF,
     DEFAULT_OD_CLIP_THRESHOLD,
     FitConfig,
@@ -48,7 +51,14 @@ from oas_web.cl_submit import (
 ROOT = Path(__file__).resolve().parent
 ML_FALLBACK_PTH = ROOT / "machine_learning" / "exp_4_epoch_3000.pth"
 ML_LATEST_POINTER = ROOT / "models" / "latest.json"
-HERO_IMAGE_PATH = ROOT / "assets" / "spectroscopy.png"
+ASSETS_DIR = ROOT / "assets"
+
+# Partner logos. Drop a real raster/vector file at either of these names to
+# override the bundled placeholder:
+#   assets/kaist_logo.png   (or .svg)   → links to https://www.kaist.ac.kr/kr/
+#   assets/april_logo.png   (or .svg)   → links to https://april.kaist.ac.kr/
+KAIST_URL = "https://www.kaist.ac.kr/kr/"
+APRIL_URL = "https://april.kaist.ac.kr/"
 
 
 def _resolve_active_checkpoint() -> tuple[Path, str]:
@@ -103,7 +113,22 @@ def _encode_image_b64(path: Path) -> str:
     return base64.b64encode(path.read_bytes()).decode("ascii")
 
 
-HERO_IMAGE_B64 = _encode_image_b64(HERO_IMAGE_PATH)
+def _resolve_logo_data_uri(stem: str) -> str:
+    """Return a data: URI for assets/<stem>.png|.svg, or '' if neither exists.
+
+    Prefers a raster .png (real institutional logo) over a bundled .svg so
+    dropping in an official file just works.
+    """
+    for ext, mime in ((".png", "image/png"), (".svg", "image/svg+xml")):
+        candidate = ASSETS_DIR / f"{stem}{ext}"
+        b64 = _encode_image_b64(candidate)
+        if b64:
+            return f"data:{mime};base64,{b64}"
+    return ""
+
+
+KAIST_LOGO_URI = _resolve_logo_data_uri("kaist_logo")
+APRIL_LOGO_URI = _resolve_logo_data_uri("april_logo")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -576,6 +601,49 @@ def inject_styles() -> None:
     }
     .sidebar-footer a:hover { text-decoration: underline; }
 
+    /* Partner logos (KAIST · APRIL Lab) — small, linked, neutral chips */
+    .partner-logos {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        margin: 0.2rem 0 0.4rem 0;
+    }
+    .partner-logos a {
+        display: inline-flex;
+        align-items: center;
+        opacity: 0.92;
+        transition: opacity .15s ease, transform .15s ease;
+    }
+    .partner-logos a:hover { opacity: 1; transform: translateY(-1px); }
+    .partner-logos img {
+        height: 34px;
+        width: auto;
+        display: block;
+    }
+    /* Text fallback when no logo file is present */
+    .partner-logo-text {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-weight: 800;
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        color: var(--ink);
+        background: white;
+        border: 1px solid var(--border-strong);
+        border-radius: 8px;
+        padding: 5px 10px;
+        line-height: 1.1;
+        text-decoration: none;
+    }
+    .partner-logo-text small {
+        display: block;
+        font-size: 0.58rem;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.08em;
+    }
+
     /* Plotly chart card */
     [data-testid="stPlotlyChart"] {
         background: white;
@@ -756,6 +824,135 @@ def _current_username() -> str:
     return str(st.session_state.get("username") or "anonymous")
 
 
+def _fit_config_dict(config: FitConfig) -> dict:
+    """FitConfig → plain dict stored alongside each submission (schema v2)."""
+    return {
+        "od_clip_threshold": float(config.od_clip_threshold),
+        "od_avg_coeff": float(config.od_avg_coeff),
+        "min_fit_fraction": float(config.min_fit_fraction),
+        "max_repeat": int(config.max_repeat),
+        "no_o3_rule": str(config.no_o3_rule),
+        "no_o3_ratio": float(config.no_o3_ratio),
+        "no_o3_density_threshold": float(config.no_o3_density_threshold),
+    }
+
+
+def auto_save_submission(
+    *,
+    path_length_cm: float,
+    reference_file: str,
+    measured_file: str,
+    wavelengths,
+    measured,
+    reconstructed,
+    species,
+    number_densities,
+    metrics: dict,
+    fit_config: dict,
+    raw_reference: tuple,   # (wavelengths, intensities)
+    raw_measured: tuple,    # (wavelengths, intensities)
+    per_species_od=None,    # (n_points, n_species) aligned to wavelengths
+) -> tuple[bool, str]:
+    """Best-effort auto-save of one analysis (raw inputs + results) to the
+    continual-learning corpus.
+
+    Consent is mandatory to run (see render_consent_block), so every completed
+    analysis is contributed automatically. Returns (ok, message). Never raises —
+    a failed upload must not invalidate the analysis the user just ran.
+    """
+    endpoint, anon_key = _get_cl_endpoint()
+    if not endpoint or not anon_key:
+        return (False, "endpoint not configured for this deployment")
+    try:
+        payload = build_submission_payload(
+            method="linear_regression",
+            path_length_cm=float(path_length_cm),
+            user_id=_current_username(),
+            reference_file=str(reference_file),
+            measured_file=str(measured_file),
+            wavelengths=wavelengths,
+            measured=measured,
+            reconstructed=reconstructed,
+            species=species,
+            number_densities=number_densities,
+            metrics=metrics,
+            fit_config=fit_config,
+            selected_method="linear_regression",
+            raw_reference=raw_reference,
+            raw_measured=raw_measured,
+            per_species_od=per_species_od,
+        )
+        submission_id = submit_to_global_model(payload, endpoint=endpoint, anon_key=anon_key)
+        return (True, str(submission_id))
+    except Exception as exc:                                     # noqa: BLE001
+        return (False, str(exc))
+
+
+def _auto_save_timeseries(
+    *,
+    ts_payload: dict,
+    file_items: list[tuple[str, bytes]],
+    path_length_cm: float,
+    config: FitConfig,
+) -> tuple:
+    """Auto-save every frame of a time-series run (raw + results), best-effort.
+
+    Returns a status tuple:
+      ("unconfigured",)                — no submission endpoint on this deploy
+      ("done", n_ok, n_fail, n_total)  — after attempting all frames
+    """
+    endpoint, anon_key = _get_cl_endpoint()
+    if not endpoint or not anon_key:
+        return ("unconfigured",)
+
+    # Linear regression is the sole engine; only linear frames carry a
+    # `.regression`. Guard defensively in case that ever changes.
+    if ts_payload.get("kind") != "linear":
+        return ("unconfigured",)
+
+    from oas_web.analysis import sort_time_series_files_by_name
+
+    bytes_by_name = {name: data for name, data in file_items}
+    ref_name, ref_bytes = sort_time_series_files_by_name(file_items)[0]
+    raw_ref = load_spectrum(ref_bytes)
+    raw_ref_xy = (raw_ref.wavelengths, raw_ref.values)
+
+    labels = ts_payload["labels"]
+    singles = ts_payload["single_results"]
+    fit_cfg = _fit_config_dict(config)
+
+    n_ok = 0
+    n_fail = 0
+    total = len(labels)
+    save_prog = st.progress(0.0, text="Auto-saving frames to the corpus…")
+    for i, (label, s) in enumerate(zip(labels, singles), start=1):
+        try:
+            raw_meas = load_spectrum(bytes_by_name[label])
+            ok, _ = auto_save_submission(
+                path_length_cm=path_length_cm,
+                reference_file=ref_name,
+                measured_file=label,
+                wavelengths=s.wavelengths,
+                measured=s.measured_od,
+                reconstructed=s.regression.reconstructed,
+                species=list(s.regression.species),
+                number_densities=s.regression.number_densities,
+                metrics=dict(s.regression.metrics),
+                fit_config=fit_cfg,
+                raw_reference=raw_ref_xy,
+                raw_measured=(raw_meas.wavelengths, raw_meas.values),
+                per_species_od=s.regression.per_species_od,
+            )
+            n_ok += int(ok)
+            n_fail += int(not ok)
+        except Exception:                                        # noqa: BLE001
+            n_fail += 1
+        save_prog.progress(i / max(total, 1),
+                           text=f"Auto-saving frames to the corpus… {i}/{total}")
+    save_prog.empty()
+    return ("done", n_ok, n_fail, total)
+
+
 def render_submit_to_global_model(
     *,
     method: str,                                    # "linear_regression" | "machine_learning"
@@ -828,15 +1025,35 @@ def render_submit_to_global_model(
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def render_hero(title: str, subtitle: str, badge: str) -> None:
-    img_html = ""
-    if HERO_IMAGE_B64:
-        img_html = (
-            f'<div class="hero-image">'
-            f'<img alt="OAS spectroscopy" '
-            f'src="data:image/png;base64,{HERO_IMAGE_B64}" />'
-            f'</div>'
+def _partner_logos_html() -> str:
+    """Two small linked institutional logos (KAIST · APRIL Lab).
+
+    Uses the bundled logo file when present; otherwise renders a text badge
+    so the layout never breaks on a fresh checkout.
+    """
+    def _one(uri: str, url: str, label: str, sub: str) -> str:
+        if uri:
+            inner = f'<img src="{uri}" alt="{label}" />'
+        else:
+            inner = f'<span class="partner-logo-text">{label}<small>{sub}</small></span>'
+        return (
+            f'<a href="{url}" target="_blank" rel="noopener" title="{label}">'
+            f'{inner}</a>'
         )
+
+    return (
+        '<div class="partner-logos">'
+        + _one(KAIST_LOGO_URI, KAIST_URL, "KAIST", "kaist.ac.kr")
+        + _one(APRIL_LOGO_URI, APRIL_URL, "APRIL", "LAB · KAIST")
+        + "</div>"
+    )
+
+
+def render_partner_logos() -> None:
+    html(_partner_logos_html())
+
+
+def render_hero(title: str, subtitle: str, badge: str) -> None:
     html(f"""
     <div class="hero">
         <div class="hero-text">
@@ -844,7 +1061,6 @@ def render_hero(title: str, subtitle: str, badge: str) -> None:
             <h1>{title}</h1>
             <p>{subtitle}</p>
         </div>
-        {img_html}
     </div>
     """)
 
@@ -868,10 +1084,15 @@ def render_metric_row(metrics: dict[str, float]) -> None:
 
 def render_chemical_table(species: list[str], values: np.ndarray) -> None:
     detected = [bool(v > 0) for v in values]
+    # Number densities routinely exceed JavaScript's Number.MAX_SAFE_INTEGER
+    # (~9.007e15 — e.g. NO/NO2 at ~1e16+), and st.column_config.NumberColumn's
+    # client-side "%.3e" formatter falls back to the raw integer for those.
+    # Pre-format every value in Python and render as text so all rows show a
+    # consistent scientific notation regardless of magnitude.
     frame = pd.DataFrame({
         "Species": species,
         "Detected": ["Yes" if d else "No" for d in detected],
-        "Number density": [float(v) for v in values],
+        "Number density": [f"{float(v):.3e}" for v in values],
         "Unit": ["molec/cm³"] * len(species),
     })
     st.dataframe(
@@ -881,9 +1102,8 @@ def render_chemical_table(species: list[str], values: np.ndarray) -> None:
         column_config={
             "Species": st.column_config.TextColumn("Species", width="small"),
             "Detected": st.column_config.TextColumn("Detected", width="small"),
-            "Number density": st.column_config.NumberColumn(
+            "Number density": st.column_config.TextColumn(
                 "Number density (molec/cm³)",
-                format="%.3e",
             ),
             "Unit": st.column_config.TextColumn("Unit", width="small"),
         },
@@ -922,6 +1142,49 @@ def render_diagnostics(
 # ────────────────────────────────────────────────────────────────────────────
 
 
+# The "Result variant" buttons map to an internal O3-mode suppression rule.
+# "standard" = original 20x NO/O3 pair (recommended); "off" = keep everything.
+_O3_MODE_LABEL: dict[str, str] = {
+    "standard": "Auto-clean",
+    "off": "Keep all species",
+}
+
+
+def _set_o3_mode(mode: str) -> None:
+    """on_click callback for the Result-variant buttons."""
+    st.session_state["o3_mode"] = mode
+
+
+# Factory defaults for the four advanced sliders, keyed by their session_state
+# key. The sliders are created WITHOUT a `value=` argument and read straight
+# from session_state, so the reset callback only has to write these back —
+# which reliably re-syncs both the value AND the slider thumb on rerun.
+_FIT_CONFIG_DEFAULTS: dict[str, float | int] = {
+    "cfg_min_fit_fraction": float(DEFAULT_MIN_FIT_FRACTION),
+    "cfg_od_avg_coeff": float(DEFAULT_OD_AVG_COEFF),
+    "cfg_od_clip_threshold": float(DEFAULT_OD_CLIP_THRESHOLD),
+    "cfg_max_repeat": int(DEFAULT_MAX_REPEAT),
+}
+
+
+def _seed_fit_config_defaults() -> None:
+    """Seed each slider's session_state key once, before the widgets render."""
+    for key, value in _FIT_CONFIG_DEFAULTS.items():
+        st.session_state.setdefault(key, value)
+
+
+def _reset_fit_config_defaults() -> None:
+    """on_click callback: write the factory defaults back into session_state.
+
+    Runs before the rerun that re-renders the sliders, so the widgets pick up
+    the default straight away — and because the value lives in session_state
+    (not a `value=` arg) the thumb position updates too.
+    """
+    for key, value in _FIT_CONFIG_DEFAULTS.items():
+        st.session_state[key] = value
+    st.session_state["o3_mode"] = "off"
+
+
 def render_sidebar() -> tuple[str, FitConfig]:
     ml_ready = ML_DEFAULT_PTH.exists()
     with st.sidebar:
@@ -930,7 +1193,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             <div class="brand-mark">
                 <span class="brand-logo">⚛</span>
                 <span class="brand-name">OAS Studio</span>
-                <span class="brand-version">v1.0</span>
+                <span class="brand-version">v1.2</span>
             </div>
             <div class="brand-tagline">Optical Absorption Spectroscopy</div>
         </div>
@@ -944,28 +1207,60 @@ def render_sidebar() -> tuple[str, FitConfig]:
         )
 
         st.markdown("---")
+        _seed_fit_config_defaults()
         with st.expander("Advanced fit configuration", expanded=False):
             st.caption(
                 "Tune the heuristics that drive O₃ clipping and the iterative refit. "
                 "These apply to the linear regression path."
             )
             min_fit_fraction = st.slider(
-                "Min fit fraction", 0.0, 0.5, float(DEFAULT_MIN_FIT_FRACTION), 0.01,
+                "Min fit fraction", 0.0, 0.5, step=0.01,
+                key="cfg_min_fit_fraction",
                 help="Minimum ratio of fit points to total points. Below this, the fit returns zeros.",
             )
             od_avg_coeff = st.slider(
-                "False-positive suppression coefficient", 0.5, 4.0,
-                float(DEFAULT_OD_AVG_COEFF), 0.05,
+                "False-positive suppression coefficient", 0.5, 4.0, step=0.05,
+                key="cfg_od_avg_coeff",
                 help=("In the 350–370 nm window, drop a species column whose reconstructed average "
                       "exceeds this multiple of the total OD average."),
             )
             od_clip_threshold = st.slider(
-                "OD clipping threshold", 0.05, 0.6,
-                float(DEFAULT_OD_CLIP_THRESHOLD), 0.01,
+                "OD clipping threshold", 0.05, 0.6, step=0.01,
+                key="cfg_od_clip_threshold",
                 help="Noise threshold for O₃ peak based positive clipping.",
             )
             max_repeat = st.slider(
-                "Max refit iterations", 0, 10, int(DEFAULT_MAX_REPEAT), 1,
+                "Max refit iterations", 0, 10, step=1,
+                key="cfg_max_repeat",
+            )
+
+            o3_mode = st.session_state.setdefault("o3_mode", "off")
+            bcols = st.columns(2)
+            bcols[0].button(
+                "Auto-clean",
+                key="o3_btn_standard", width="stretch",
+                type=("primary" if o3_mode == "standard" else "secondary"),
+                on_click=_set_o3_mode, args=("standard",),
+                help="In an O₃-dominated spectrum, automatically drops NO (or O₃) "
+                     "when one is a false positive, then re-fits the rest.",
+            )
+            bcols[1].button(
+                "Keep all species",
+                key="o3_btn_off", width="stretch",
+                type=("primary" if o3_mode == "off" else "secondary"),
+                on_click=_set_o3_mode, args=("off",),
+                help="Default. Keep every species as fitted — no O₃-mode NO/O₃ removal.",
+            )
+
+            # Reset writes the factory defaults back into session_state; the
+            # widgets read from session_state, so values + thumbs revert on rerun.
+            st.button(
+                "↺  Reset to defaults",
+                key="cfg_reset_btn",
+                type="secondary",
+                width="stretch",
+                on_click=_reset_fit_config_defaults,
+                help="Restore every advanced setting above to its factory default.",
             )
 
         config = FitConfig(
@@ -973,6 +1268,9 @@ def render_sidebar() -> tuple[str, FitConfig]:
             od_avg_coeff=float(od_avg_coeff),
             min_fit_fraction=float(min_fit_fraction),
             max_repeat=int(max_repeat),
+            no_o3_rule=("ratio" if o3_mode == "standard" else "off"),
+            no_o3_ratio=float(DEFAULT_NO_O3_RATIO),
+            no_o3_density_threshold=float(DEFAULT_NO_O3_DENSITY_THRESHOLD),
         )
 
         st.markdown("---")
@@ -994,6 +1292,10 @@ def render_sidebar() -> tuple[str, FitConfig]:
             </div>
         </div>
         """)
+
+        # Institutional logos — sit in normal sidebar flow, just above the
+        # bottom-pinned credits.
+        render_partner_logos()
 
         # Footer is rendered in its own html() call so it gets a dedicated
         # stElementContainer wrapper. CSS gives that wrapper margin-top:auto
@@ -1018,38 +1320,18 @@ def render_sidebar() -> tuple[str, FitConfig]:
 
 
 # ────────────────────────────────────────────────────────────────────────────
-# Method picker (shared)
+# Consent (shared)
 # ────────────────────────────────────────────────────────────────────────────
 
 
-def render_method_picker(state_key: str) -> str:
-    """Page-level method picker; defaults to Linear regression."""
-    if state_key not in st.session_state:
-        st.session_state[state_key] = "Linear regression"
-    method = st.radio(
-        "Fitting method",
-        options=["Linear regression", "Machine learning"],
-        index=["Linear regression", "Machine learning"].index(st.session_state[state_key]),
-        horizontal=True,
-        key=state_key,
-        help=("Linear regression: positive NNLS fit with O₃ clipping and iterative refit. "
-              "Machine learning: ResNet101 CNN trained on simulated OAS spectra."),
-    )
-    return method
+def render_consent_block(key: str) -> bool:
+    """Continual-learning consent banner — always shown, and required to run.
 
-
-def render_consent_block(method: str, key: str) -> bool:
-    """ML-only consent banner. Returns False for non-ML methods.
-
-    LR users get the regular reconstruction CSV from the Downloads tab — the
-    "continual learning" framing only applies to feeding new spectra back into
-    the ML training pool, so it would be confusing to expose it for LR.
+    Consent is now mandatory: the analysis raw spectra and the extracted
+    results are contributed to the continual-learning corpus so the global
+    model keeps improving. The Run button stays disabled until the user
+    agrees here.
     """
-    if method != "Machine learning":
-        # Prevent stale state from leaking when the user toggles methods.
-        st.session_state.pop(key, None)
-        return False
-
     html("""
     <div class="consent-card">
         <div class="consent-card-title">
@@ -1057,19 +1339,19 @@ def render_consent_block(method: str, key: str) -> bool:
             <span>Help improve the global model</span>
         </div>
         <div class="consent-card-body">
-            Opt in to add this analysis to the continual-learning corpus. Your
-            reconstruction is exported as a CSV training sample for the next
-            model release. Only the filenames you provided are kept as
-            metadata; nothing leaves your machine until you explicitly upload
-            the CSV via the submission portal.
+            To run an analysis you agree to contribute it to the
+            continual-learning corpus: the raw spectra you upload (reference I₀
+            and measured Iₜ) together with the extracted results are stored to
+            train the next model release. This consent is required before the
+            analysis can run.
         </div>
     </div>
     """)
     return st.checkbox(
-        "Yes, contribute this analysis to the global model",
+        "I agree to contribute this analysis (raw data + results) to the global model",
         value=False,
         key=key,
-        help="Enables the continual-learning sample download in the Downloads tab.",
+        help="Required to run. Enables the continual-learning contribution and sample download.",
     )
 
 
@@ -1195,15 +1477,67 @@ def run_timeseries_analysis(
 # ────────────────────────────────────────────────────────────────────────────
 
 
+def _run_single_from_ctx(ctx: dict, cross_dir: str, config: FitConfig,
+                         o3_mode: str, method: str, *, do_save: bool) -> None:
+    """Run a single analysis from stored input bytes and store the result.
+
+    Used both by the Run button (do_save=True → auto-saves) and by the instant
+    Result-variant switch (do_save=False → preview only, not saved).
+    """
+    try:
+        result_payload = run_single_analysis(
+            method=method,
+            ref_bytes=ctx["ref_bytes"],
+            meas_bytes=ctx["meas_bytes"],
+            cross_dir=cross_dir,
+            path_length_cm=ctx["path_length"],
+            config=config,
+        )
+    except Exception as exc:                                    # noqa: BLE001
+        st.error(f"Analysis failed: {exc}")
+        st.session_state.pop("single_result", None)
+        return
+
+    st.session_state["single_result"] = result_payload
+    st.session_state["single_result_mode"] = o3_mode
+    st.session_state["single_inputs"] = {
+        "ref": ctx["ref_name"], "meas": ctx["meas_name"],
+        "path_length": ctx["path_length"], "method": method, "cl_consent": True,
+    }
+    if do_save:
+        st.session_state["single_preview"] = False
+        raw_ref = load_spectrum(ctx["ref_bytes"])
+        raw_meas = load_spectrum(ctx["meas_bytes"])
+        st.session_state["single_save"] = auto_save_submission(
+            path_length_cm=ctx["path_length"],
+            reference_file=ctx["ref_name"],
+            measured_file=ctx["meas_name"],
+            wavelengths=result_payload["wavelengths"],
+            measured=result_payload["measured"],
+            reconstructed=result_payload["reconstructed"],
+            species=result_payload["species"],
+            number_densities=result_payload["number_densities"],
+            metrics=result_payload["metrics"],
+            fit_config=_fit_config_dict(config),
+            raw_reference=(raw_ref.wavelengths, raw_ref.values),
+            raw_measured=(raw_meas.wavelengths, raw_meas.values),
+            per_species_od=result_payload["per_species_od"],
+        )
+    else:
+        st.session_state["single_preview"] = True
+
+
 def render_single_page(selected_cross: str, config: FitConfig) -> None:
-    method = render_method_picker("single_method")
+    # Linear regression is the sole analysis engine (higher accuracy); the
+    # method picker was removed.
+    method = "Linear regression"
 
     render_hero(
         title="Single OAS analysis",
         subtitle=("Upload a single measured spectrum together with the reference I₀. "
                   "The app computes optical depth, estimates concentrations for 8 chemical "
                   "species, and validates the reconstruction."),
-        badge=f"Single · {method}",
+        badge="Single OAS",
     )
 
     # ── Input card ─────────────────────────────────────────────
@@ -1230,13 +1564,14 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
             key="single_path_length",
         )
 
-        cl_enabled = render_consent_block(method=method, key="single_cl_consent")
+        cl_enabled = render_consent_block(key="single_cl_consent")
 
-        run_label = ("Run linear regression analysis"
-                     if method == "Linear regression"
-                     else "Run machine learning analysis")
-        run_clicked = st.button(run_label, type="primary", key="single_run_btn",
-                                width="stretch")
+        run_clicked = st.button(
+            "Run analysis", type="primary", key="single_run_btn",
+            width="stretch", disabled=not cl_enabled,
+        )
+        if not cl_enabled:
+            st.caption("☑️  Check the agreement above to enable the analysis.")
 
         # Always show preview if both files are uploaded — same UI for LR and ML.
         if ref_file and meas_file:
@@ -1263,30 +1598,31 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 st.warning(f"Could not preview the spectra: {exc}")
 
     # ── Run handler ────────────────────────────────────────────
+    o3_mode = st.session_state.get("o3_mode", "standard")
     if run_clicked:
         if ref_file is None or meas_file is None:
             st.error("Both I₀ and Iₜ files are required before running.")
         else:
-            try:
-                result_payload = run_single_analysis(
-                    method=method,
-                    ref_bytes=ref_file.getvalue(),
-                    meas_bytes=meas_file.getvalue(),
-                    cross_dir=selected_cross,
-                    path_length_cm=float(path_length_cm),
-                    config=config,
-                )
-                st.session_state["single_result"] = result_payload
-                st.session_state["single_inputs"] = {
-                    "ref": ref_file.name,
-                    "meas": meas_file.name,
-                    "path_length": float(path_length_cm),
-                    "method": method,
-                    "cl_consent": bool(cl_enabled),
-                }
-            except Exception as exc:
-                st.error(f"Analysis failed: {exc}")
-                st.session_state.pop("single_result", None)
+            # Store the raw input bytes so the Result-variant buttons can
+            # re-run instantly without a re-upload.
+            st.session_state["single_ctx"] = {
+                "ref_bytes": ref_file.getvalue(),
+                "meas_bytes": meas_file.getvalue(),
+                "ref_name": ref_file.name,
+                "meas_name": meas_file.name,
+                "path_length": float(path_length_cm),
+            }
+            _run_single_from_ctx(
+                st.session_state["single_ctx"], selected_cross, config,
+                o3_mode, method, do_save=True,
+            )
+    else:
+        # Instant Result-variant switch: when the user clicked a variant button
+        # after a completed analysis, re-run (preview only) with the new mode.
+        ctx = st.session_state.get("single_ctx")
+        if (ctx is not None and st.session_state.get("single_result") is not None
+                and st.session_state.get("single_result_mode") != o3_mode):
+            _run_single_from_ctx(ctx, selected_cross, config, o3_mode, method, do_save=False)
 
     # ── Result card ────────────────────────────────────────────
     result = st.session_state.get("single_result")
@@ -1297,9 +1633,26 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
             st.info("📊  Results appear here once an analysis run completes.")
             return
 
-        # Don't show stale ML results if user just switched to LR (and vice versa).
-        if inputs.get("method") and inputs["method"] != method:
-            st.info(f"The current result was produced by *{inputs['method']}*. Re-run to refresh.")
+        variant_label = _O3_MODE_LABEL.get(st.session_state.get("single_result_mode", "standard"))
+        if st.session_state.get("single_preview"):
+            st.info(
+                f"👁 Previewing the **{variant_label}** variant (not saved). Press "
+                "**Run analysis** to save this result to the corpus."
+            )
+        elif (save := st.session_state.get("single_save")) is not None:
+            ok, msg = save
+            if ok:
+                st.success(
+                    f"💾 Auto-saved the **{variant_label}** result to the global corpus "
+                    f"· reference id `{msg}`"
+                )
+            elif "not configured" in msg:
+                st.caption(
+                    "💾 Auto-save skipped — submission endpoint not configured for this "
+                    "deployment. Results are still downloadable below."
+                )
+            else:
+                st.warning(f"⚠️ Auto-save could not upload (analysis is still valid): {msg}")
 
         render_metric_row(result["metrics"])
 
@@ -1353,63 +1706,11 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
                 mime="text/csv",
                 width="stretch",
             )
-            if inputs.get("cl_consent") and result["kind"] == "ml":
-                native = result["_native"]
-                method_inputs = str(inputs.get("method", "Machine learning"))
-                method_payload = "machine_learning"
-
-                # Primary action: submit to the global corpus.
-                render_submit_to_global_model(
-                    method=method_payload,
-                    path_length_cm=float(inputs.get("path_length", 15.0)),
-                    reference_file=str(inputs.get("ref", "")),
-                    measured_file=str(inputs.get("meas", "")),
-                    wavelengths=native.wavelengths,
-                    measured=native.measured_absorbance,
-                    reconstructed=native.reconstructed,
-                    species=native.species,
-                    number_densities=native.number_densities,
-                    ml_metrics=native.metrics,
-                    button_key="submit_single_ml",
-                )
-
-                # Local backup CSV
-                cl_frame = build_continual_learning_frame_ml_single(
-                    ml_result=native,
-                    wavelengths=native.wavelengths,
-                    measured_absorbance=native.measured_absorbance,
-                    path_length_cm=float(inputs.get("path_length", 15.0)),
-                    reference_file=str(inputs.get("ref", "")),
-                    measured_file=str(inputs.get("meas", "")),
-                )
-                st.download_button(
-                    "Download continual-learning sample (CSV, local backup)",
-                    data=cl_frame.to_csv(index=False).encode("utf-8"),
-                    file_name="oas_cl_sample_ml.csv",
-                    mime="text/csv",
-                    width="stretch",
-                )
-            else:
-                # LR uses a simpler "save reconstruction" framing — no submit.
-                if inputs.get("cl_consent") and result["kind"] == "linear":
-                    cl_frame = build_continual_learning_frame_single(
-                        result=result["_native"],
-                        path_length_cm=float(inputs.get("path_length", 15.0)),
-                        reference_file=str(inputs.get("ref", "")),
-                        measured_file=str(inputs.get("meas", "")),
-                    )
-                    st.download_button(
-                        "Download continual-learning sample (CSV)",
-                        data=cl_frame.to_csv(index=False).encode("utf-8"),
-                        file_name="oas_cl_sample_linear.csv",
-                        mime="text/csv",
-                        width="stretch",
-                    )
-                else:
-                    st.caption(
-                        "Enable the *continual-learning* checkbox above to unlock the CL export "
-                        "and (for ML) the global-model submission."
-                    )
+            st.caption(
+                "Per-wavelength measured vs reconstructed optical depth plus each "
+                "species' contribution. Corpus save status is shown in the banner "
+                "above the metrics."
+            )
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -1418,14 +1719,16 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
 
 
 def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
-    method = render_method_picker("ts_method")
+    # Linear regression is the sole analysis engine (higher accuracy); the
+    # method picker was removed.
+    method = "Linear regression"
 
     render_hero(
         title="Time-series OAS analysis",
         subtitle=("Upload a sequence of measured spectra. The file with the lowest numeric "
                   "suffix is treated as I₀, and the rest are processed in order. Observe the "
                   "species trends in real time and download the final summary."),
-        badge=f"Time-series · {method}",
+        badge="Time-series OAS",
     )
 
     with st.container(border=True):
@@ -1444,13 +1747,14 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
             key="ts_path_length",
         )
 
-        cl_enabled = render_consent_block(method=method, key="ts_cl_consent")
+        cl_enabled = render_consent_block(key="ts_cl_consent")
 
-        run_label = ("Run linear regression analysis"
-                     if method == "Linear regression"
-                     else "Run machine learning analysis")
-        run_clicked = st.button(run_label, type="primary", key="ts_run_btn",
-                                width="stretch")
+        run_clicked = st.button(
+            "Run analysis", type="primary", key="ts_run_btn",
+            width="stretch", disabled=not cl_enabled,
+        )
+        if not cl_enabled:
+            st.caption("☑️  Check the agreement above to enable the analysis.")
 
         if uploads:
             st.caption(f"📁 {len(uploads)} files loaded.")
@@ -1466,9 +1770,10 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                 ratio = done / max(total, 1)
                 progress.progress(ratio, text=f"Processing time-series… {done}/{total}")
 
+            ts_payload_new = None
             try:
                 with st.spinner(f"Running {method.lower()} on {len(file_items)} frames…"):
-                    ts_payload = run_timeseries_analysis(
+                    ts_payload_new = run_timeseries_analysis(
                         method=method,
                         file_items=file_items,
                         cross_dir=selected_cross,
@@ -1477,7 +1782,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         progress_callback=_on_step,
                     )
                 progress.empty()
-                st.session_state["ts_result"] = ts_payload
+                st.session_state["ts_result"] = ts_payload_new
                 st.session_state["ts_inputs"] = {
                     "path_length": float(path_length_cm),
                     "method": method,
@@ -1488,6 +1793,17 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                 st.error(f"Time-series analysis failed: {exc}")
                 st.session_state.pop("ts_result", None)
 
+            # Auto-save every frame (raw inputs + results) to the corpus.
+            # Best-effort and decoupled from the analysis: a failed upload never
+            # invalidates the run. Skipped entirely when no endpoint is set.
+            if ts_payload_new is not None:
+                st.session_state["ts_save"] = _auto_save_timeseries(
+                    ts_payload=ts_payload_new,
+                    file_items=file_items,
+                    path_length_cm=float(path_length_cm),
+                    config=config,
+                )
+
     ts_payload = st.session_state.get("ts_result")
     ts_inputs = st.session_state.get("ts_inputs", {})
     with st.container(border=True):
@@ -1497,6 +1813,23 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
             return
         if ts_inputs.get("method") and ts_inputs["method"] != method:
             st.info(f"The current result was produced by *{ts_inputs['method']}*. Re-run to refresh.")
+
+        ts_save = st.session_state.get("ts_save")
+        if ts_save is not None:
+            if ts_save[0] == "unconfigured":
+                st.caption(
+                    "💾 Auto-save skipped — submission endpoint not configured for this "
+                    "deployment. The summary is still downloadable below."
+                )
+            elif ts_save[0] == "done":
+                _, n_ok, n_fail, total = ts_save
+                if n_fail == 0:
+                    st.success(f"💾 Auto-saved all {n_ok}/{total} frames (raw + results) to the global corpus.")
+                else:
+                    st.warning(
+                        f"💾 Auto-saved {n_ok}/{total} frames; {n_fail} failed to upload "
+                        "(analysis is still valid)."
+                    )
 
         summary_table = ts_payload["summary_table"]
         labels = ts_payload["labels"]
@@ -1588,31 +1921,11 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                 mime="text/csv",
                 width="stretch",
             )
-            if ts_inputs.get("cl_consent"):
-                if ts_payload["kind"] == "linear":
-                    cl_frame = build_continual_learning_frame_timeseries(
-                        result=ts_payload["_native"],
-                        path_length_cm=float(ts_inputs.get("path_length", 15.0)),
-                    )
-                    cl_name = "ts_cl_dataset_linear.csv"
-                else:
-                    cl_frame = build_continual_learning_frame_ml_timeseries(
-                        ts_result=ts_payload["_native"],
-                        path_length_cm=float(ts_inputs.get("path_length", 15.0)),
-                    )
-                    cl_name = "ts_cl_dataset_ml.csv"
-                if isinstance(cl_frame, pd.DataFrame) and not cl_frame.empty:
-                    st.download_button(
-                        "Download continual-learning dataset (CSV)",
-                        data=cl_frame.to_csv(index=False).encode("utf-8"),
-                        file_name=cl_name,
-                        mime="text/csv",
-                        width="stretch",
-                    )
-                else:
-                    st.info("Continual-learning dataset is empty.")
-            else:
-                st.caption("Enable the *continual-learning* checkbox above to unlock the CL export.")
+            st.caption(
+                "Per-timepoint number densities for every species. All frames "
+                "(raw inputs + results) were auto-saved to the global corpus — "
+                "see the banner above."
+            )
 
 
 # ────────────────────────────────────────────────────────────────────────────

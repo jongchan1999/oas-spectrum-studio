@@ -32,8 +32,31 @@ from typing import Iterable
 import numpy as np
 
 
-SCHEMA_VERSION = 1
-APP_VERSION = "1.0.0"
+SCHEMA_VERSION = 2
+APP_VERSION = "1.2.0"
+
+
+def _finite_xy(x, y) -> tuple[list[float], list[float]]:
+    """Return (x, y) as plain lists with non-finite samples dropped pairwise."""
+    xa = np.asarray(x, dtype=float)
+    ya = np.asarray(y, dtype=float)
+    if xa.shape != ya.shape:
+        raise ValueError("paired arrays must share shape")
+    mask = np.isfinite(xa) & np.isfinite(ya)
+    return xa[mask].tolist(), ya[mask].tolist()
+
+
+def _clean_metrics(metrics: dict | None) -> dict | None:
+    if not metrics:
+        return None
+    out: dict = {}
+    for key in ("r2", "rmse", "mae", "mape"):
+        val = metrics.get(key)
+        if val is not None and np.isfinite(val):
+            out[key] = float(val)
+        else:
+            out[key] = None
+    return out
 
 
 def build_submission_payload(
@@ -49,8 +72,21 @@ def build_submission_payload(
     species: Iterable[str],
     number_densities: Iterable[float],
     ml_metrics: dict | None = None,
+    metrics: dict | None = None,
+    fit_config: dict | None = None,
+    selected_method: str | None = None,
+    raw_reference: tuple | None = None,   # (wavelengths, intensities)
+    raw_measured: tuple | None = None,    # (wavelengths, intensities)
+    per_species_od: np.ndarray | None = None,  # (n_points, n_species) aligned to wavelengths
 ) -> dict:
     """Build the JSON-serialisable payload matching the edge function schema.
+
+    ``spectrum`` carries the processed optical-depth curve (measured vs
+    reconstructed). ``raw_spectrum`` (schema v2) additionally carries the
+    *original* reference and measured intensity traces so the corpus keeps
+    the untouched inputs alongside the derived analysis. ``predictions``
+    carries the full reconstruction metrics and, via ``client.fit_config``,
+    the settings used to produce them.
 
     All arrays are converted to plain Python lists with finite-float filtering.
     Non-finite samples are silently dropped to keep the server validator happy.
@@ -74,13 +110,43 @@ def build_submission_payload(
     if len(species_list) != len(nd_list):
         raise ValueError("species and number_densities length mismatch")
 
+    # Per-species OD contribution (the `od_<species>` columns of the
+    # reconstruction CSV / the dashed traces in the validation overlay).
+    # Filtered by the same finite-mask as the wavelength axis so lengths match.
+    per_species_block: dict | None = None
+    if per_species_od is not None:
+        pso = np.asarray(per_species_od, dtype=float)
+        if pso.ndim == 2 and pso.shape[0] == mask.size and pso.shape[1] == len(species_list):
+            pso = pso[mask]
+            per_species_block = {
+                species_list[i]: np.where(np.isfinite(pso[:, i]), pso[:, i], 0.0).tolist()
+                for i in range(len(species_list))
+            }
+
+    client_block: dict = {
+        "app_version": APP_VERSION,
+        "method": method,
+        "path_length_cm": float(path_length_cm),
+    }
+    if selected_method:
+        client_block["selected_method"] = str(selected_method)
+    if fit_config:
+        # fit_config carries mixed types (numeric thresholds + string rule
+        # names). Coerce numerics to float; pass everything else through as-is.
+        def _coerce(v):
+            if isinstance(v, bool):
+                return v
+            if isinstance(v, (int, float)):
+                return float(v)
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return v
+        client_block["fit_config"] = {k: _coerce(v) for k, v in fit_config.items()}
+
     payload: dict = {
         "schema_version": SCHEMA_VERSION,
-        "client": {
-            "app_version": APP_VERSION,
-            "method": method,
-            "path_length_cm": float(path_length_cm),
-        },
+        "client": client_block,
         "metadata": {
             "reference_file": str(reference_file),
             "measured_file": str(measured_file),
@@ -92,16 +158,33 @@ def build_submission_payload(
             "wavelength_nm": w,
             "measured_absorbance": m,
             "reconstructed_absorbance": r,
+            **({"per_species_od": per_species_block} if per_species_block else {}),
         },
         "predictions": {
             "species": species_list,
             "number_density": nd_list,
         },
     }
-    if ml_metrics:
+
+    # Raw, untouched input traces (reference I₀ + measured Iₜ).
+    if raw_reference is not None and raw_measured is not None:
+        ref_w, ref_i = _finite_xy(raw_reference[0], raw_reference[1])
+        meas_w, meas_i = _finite_xy(raw_measured[0], raw_measured[1])
+        payload["raw_spectrum"] = {
+            "reference": {"wavelength_nm": ref_w, "intensity": ref_i},
+            "measured": {"wavelength_nm": meas_w, "intensity": meas_i},
+        }
+
+    full_metrics = _clean_metrics(metrics)
+    if full_metrics:
+        payload["predictions"]["metrics"] = full_metrics
+
+    # Back-compat ml_metrics block (r2 / rmse only).
+    ml_src = ml_metrics if ml_metrics else metrics
+    if ml_src:
         payload["predictions"]["ml_metrics"] = {
-            "r2": float(ml_metrics.get("r2")) if ml_metrics.get("r2") is not None else None,
-            "rmse": float(ml_metrics.get("rmse")) if ml_metrics.get("rmse") is not None else None,
+            "r2": float(ml_src.get("r2")) if ml_src.get("r2") is not None else None,
+            "rmse": float(ml_src.get("rmse")) if ml_src.get("rmse") is not None else None,
         }
     return payload
 

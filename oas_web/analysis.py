@@ -65,6 +65,19 @@ DEFAULT_OD_AVG_COEFF = 1.2
 DEFAULT_MIN_FIT_FRACTION = 0.15
 DEFAULT_MAX_REPEAT = 5
 
+# O3-mode NO/O3 suppression — faithful to the original absorption-fitting
+# notebook. In O3-dominated spectra NO (or O3) is often a false positive:
+#   "ratio"      — the 20x pair (default): if coeff[NO] > ratio*coeff[O3]
+#                  remove O3; if coeff[NO] < ratio*coeff[O3] remove NO.
+#   "o3_density" — if O3 number density (coeff[O3]/path_length) > threshold,
+#                  remove NO.
+#   "off"        — apply neither.
+# Removal = zero that cross-section column and refit the remaining species,
+# so the survivors re-fit to the residual signal (not a bare post-hoc zero).
+DEFAULT_NO_O3_RULE = "ratio"
+DEFAULT_NO_O3_RATIO = 20.0
+DEFAULT_NO_O3_DENSITY_THRESHOLD = 3.0e14
+
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
 OD_AVG_COEFF = DEFAULT_OD_AVG_COEFF
@@ -79,6 +92,9 @@ class FitConfig:
     od_avg_coeff: float = DEFAULT_OD_AVG_COEFF
     min_fit_fraction: float = DEFAULT_MIN_FIT_FRACTION
     max_repeat: int = DEFAULT_MAX_REPEAT
+    no_o3_rule: str = DEFAULT_NO_O3_RULE                       # "ratio" | "o3_density" | "off"
+    no_o3_ratio: float = DEFAULT_NO_O3_RATIO
+    no_o3_density_threshold: float = DEFAULT_NO_O3_DENSITY_THRESHOLD
 
 
 def _decode_text(raw: bytes) -> str:
@@ -443,6 +459,42 @@ def _iterative_repeat_refit(
     return coefficients, repeat_count, sorted(excluded_union)
 
 
+def _o3_no_exclusion_indices(
+    coefficients: np.ndarray,
+    species: list[str],
+    path_length_cm: float,
+    rule: str,
+    ratio: float,
+    density_threshold: float,
+) -> list[int]:
+    """Species indices to exclude under the O3-mode NO/O3 rule.
+
+    Faithful to the original absorption-fitting notebook:
+      "ratio"      — if coeff[NO] > ratio*coeff[O3] remove O3;
+                     if coeff[NO] < ratio*coeff[O3] remove NO.
+      "o3_density" — if O3 number density (coeff[O3]/path_length) > threshold,
+                     remove NO.
+      "off"        — nothing.
+    `coefficients` are the raw fit coefficients (number density x path length).
+    """
+    if rule == "off" or "NO" not in species or "O3" not in species:
+        return []
+    ind_no = species.index("NO")
+    ind_o3 = species.index("O3")
+    out: list[int] = []
+    if rule == "o3_density":
+        if coefficients[ind_no] > 0:
+            o3_number_density = coefficients[ind_o3] / max(path_length_cm, 1e-12)
+            if o3_number_density > density_threshold:
+                out.append(ind_no)
+    else:  # "ratio" — original 20x pair
+        if coefficients[ind_o3] > 0 and coefficients[ind_no] > ratio * coefficients[ind_o3]:
+            out.append(ind_o3)
+        if coefficients[ind_no] > 0 and coefficients[ind_no] < ratio * coefficients[ind_o3]:
+            out.append(ind_no)
+    return out
+
+
 def discover_cross_section_dirs(search_root: str | Path) -> list[Path]:
     root = Path(search_root)
     if not root.exists():
@@ -792,6 +844,40 @@ def run_linear_regression(
         od_avg_coeff=cfg.od_avg_coeff,
         min_fit_fraction=cfg.min_fit_fraction,
     )
+
+    # O3-mode NO/O3 suppression (faithful to the original absorption-fitting
+    # notebook): in O3-dominated spectra remove NO — or O3 — when the selected
+    # rule fires, by zeroing that cross-section column and refitting the
+    # remaining species so they re-fit to the residual signal. Layered after
+    # the 350-370 nm refit above and looped until the exclusion set is stable.
+    if cfg.no_o3_rule != "off":
+        excluded_set = set(excluded_indices)
+        fit_idx = np.asarray(fit_indices, dtype=int)
+        for _ in range(max(cfg.max_repeat, 1)):
+            new = set(_o3_no_exclusion_indices(
+                coefficients, cross_sections.species, path_length_cm,
+                cfg.no_o3_rule, cfg.no_o3_ratio, cfg.no_o3_density_threshold,
+            )) - excluded_set
+            if not new:
+                break
+            excluded_set |= new
+            keep_cols = np.array(
+                [i for i in range(basis.shape[1]) if i not in excluded_set], dtype=int
+            )
+            if keep_cols.size == 0:
+                coefficients = np.zeros(basis.shape[1], dtype=float)
+                repeat_count += 1
+                break
+            fitted_keep, _ = _fit_nnls_scaled(
+                basis[fit_idx][:, keep_cols],
+                absorbance.values[fit_idx],
+                total_count=absorbance.values.size,
+                min_fit_fraction=cfg.min_fit_fraction,
+            )
+            coefficients = np.zeros(basis.shape[1], dtype=float)
+            coefficients[keep_cols] = fitted_keep
+            repeat_count += 1
+        excluded_indices = sorted(excluded_set)
 
     hono_exceed = _evaluate_hono_exceed(
         basis=basis,

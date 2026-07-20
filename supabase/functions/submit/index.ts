@@ -31,6 +31,8 @@ interface ClientBlock {
   app_version: string;
   method: "linear_regression" | "machine_learning";
   path_length_cm: number;
+  selected_method?: string;
+  fit_config?: Record<string, number>;
 }
 
 interface MetadataBlock {
@@ -51,6 +53,17 @@ interface PredictionsBlock {
   species: string[];
   number_density: number[];
   ml_metrics?: { r2?: number; rmse?: number };
+  metrics?: { r2?: number; rmse?: number; mae?: number; mape?: number };
+}
+
+interface RawTrace {
+  wavelength_nm: number[];
+  intensity: number[];
+}
+
+interface RawSpectrumBlock {
+  reference: RawTrace;
+  measured: RawTrace;
 }
 
 interface SubmissionPayload {
@@ -58,6 +71,7 @@ interface SubmissionPayload {
   client: ClientBlock;
   metadata: MetadataBlock;
   spectrum: SpectrumBlock;
+  raw_spectrum?: RawSpectrumBlock;
   predictions: PredictionsBlock;
 }
 
@@ -85,7 +99,8 @@ function isFiniteArray(arr: unknown, minLen = 10): arr is number[] {
 }
 
 function validatePayload(p: SubmissionPayload): string | null {
-  if (p?.schema_version !== 1) return "schema_version must be 1";
+  if (p?.schema_version !== 1 && p?.schema_version !== 2)
+    return "schema_version must be 1 or 2";
   if (!p.client?.app_version) return "client.app_version is required";
   if (!["linear_regression", "machine_learning"].includes(p.client?.method))
     return "client.method must be linear_regression or machine_learning";
@@ -117,6 +132,21 @@ function validatePayload(p: SubmissionPayload): string | null {
   for (const v of p.predictions.number_density) {
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0)
       return "predictions.number_density must be finite and non-negative";
+  }
+
+  // raw_spectrum is optional (schema v2); validate it only when present.
+  if (p.raw_spectrum) {
+    const ref = p.raw_spectrum.reference;
+    const meas = p.raw_spectrum.measured;
+    if (!ref || !meas) return "raw_spectrum.reference and .measured are required when raw_spectrum is set";
+    if (!isFiniteArray(ref.wavelength_nm, 2) || !isFiniteArray(ref.intensity, 2))
+      return "raw_spectrum.reference arrays invalid";
+    if (ref.wavelength_nm.length !== ref.intensity.length)
+      return "raw_spectrum.reference length mismatch";
+    if (!isFiniteArray(meas.wavelength_nm, 2) || !isFiniteArray(meas.intensity, 2))
+      return "raw_spectrum.measured arrays invalid";
+    if (meas.wavelength_nm.length !== meas.intensity.length)
+      return "raw_spectrum.measured length mismatch";
   }
 
   return null;
@@ -182,8 +212,13 @@ Deno.serve(async (req: Request) => {
   // 2) Insert metadata row in public.cl_submissions
   const wmin = Math.min(...payload.spectrum.wavelength_nm);
   const wmax = Math.max(...payload.spectrum.wavelength_nm);
-  const r2 = payload.predictions.ml_metrics?.r2 ?? null;
-  const rmse = payload.predictions.ml_metrics?.rmse ?? null;
+  // Prefer the full reconstruction metrics (schema v2); fall back to the
+  // legacy ml_metrics block for v1 submissions.
+  const fullMetrics = payload.predictions.metrics ?? payload.predictions.ml_metrics ?? {};
+  const r2 = fullMetrics.r2 ?? null;
+  const rmse = fullMetrics.rmse ?? null;
+  const mae = (fullMetrics as { mae?: number }).mae ?? null;
+  const mape = (fullMetrics as { mape?: number }).mape ?? null;
 
   const insertSub = await supabase.from("cl_submissions").insert({
     id: submissionId,
@@ -201,6 +236,16 @@ Deno.serve(async (req: Request) => {
     n_points: payload.spectrum.wavelength_nm.length,
     ml_r2: r2,
     ml_rmse: rmse,
+    recon_r2: r2,
+    recon_rmse: rmse,
+    recon_mae: mae,
+    recon_mape: mape,
+    selected_method: payload.client.selected_method ?? null,
+    fit_config: payload.client.fit_config ?? null,
+    // Raw intensity traces are intentionally NOT duplicated into DB columns —
+    // they live in full inside the Storage blob (storage_key). This keeps
+    // cl_submissions rows small (~2 KB vs ~40 KB) so the 8 GB Postgres lasts
+    // ~20x longer; curation reads the raw traces from the blob, not the row.
     status: "raw",
   });
   if (insertSub.error) {
