@@ -38,6 +38,7 @@ class RegressionResult:
     hono_exceed: bool
     excluded_species: list[str]
     no_align_shifts: dict[str, float] | None = None
+    no_fwhm_delta: float | None = None
 
 
 @dataclass
@@ -93,6 +94,22 @@ NO_ALIGN_SHIFT_STEP_NM = 0.02
 NO_ALIGN_MIN_CORRELATION = 0.8
 NO_ALIGN_MIN_POINTS = 8
 
+# NO resolution (FWHM) matching: the tabulated NO cross section carries the
+# resolution of the instrument it was prepared for. A different spectrometer
+# sees the gamma bands broader (lower resolution) or narrower (higher
+# resolution), so the effective sigma is the tabulated one convolved with —
+# or deconvolved by — a Gaussian of FWHM |delta|. delta > 0 broadens, delta < 0
+# sharpens (Wiener-regularised deconvolution; band area, and therefore the
+# retrieved NO density, is preserved either way).
+DEFAULT_NO_FWHM_MODE = "auto"          # "auto" | "manual" | "off"
+DEFAULT_NO_FWHM_DELTA = 0.0            # nm, used in "manual" mode
+NO_FWHM_DELTA_MIN = -0.35              # sharpening limit (deconvolution stability)
+NO_FWHM_DELTA_MAX = 1.5                # broadening limit
+NO_FWHM_SCAN_STEP = 0.05               # nm, auto-scan grid
+NO_FWHM_TIE_TOLERANCE = 0.003          # prefer delta=0 within this corr margin
+NO_FWHM_DECONV_REG = 1e-3              # Wiener regularisation for delta < 0
+NO_FWHM_FINE_STEP = 0.02               # nm, uniform grid for the FFT ops
+
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
 OD_AVG_COEFF = DEFAULT_OD_AVG_COEFF
@@ -111,6 +128,8 @@ class FitConfig:
     no_o3_ratio: float = DEFAULT_NO_O3_RATIO
     no_o3_density_threshold: float = DEFAULT_NO_O3_DENSITY_THRESHOLD
     align_no_bands: bool = DEFAULT_ALIGN_NO_BANDS
+    no_fwhm_mode: str = DEFAULT_NO_FWHM_MODE                   # "auto" | "manual" | "off"
+    no_fwhm_delta: float = DEFAULT_NO_FWHM_DELTA               # nm, manual mode only
 
 
 def _decode_text(raw: bytes) -> str:
@@ -455,36 +474,142 @@ def _estimate_no_band_shift(
     return best_shift, best_corr
 
 
-def _align_no_basis_column(
+def _resolution_adjust_family(sigma_fine: np.ndarray, step: float):
+    """Return adjust(delta_fwhm) -> sigma on the same fine grid.
+
+    delta > 0 convolves with a Gaussian of that FWHM (broaden); delta < 0
+    applies the Wiener-regularised inverse (sharpen). The forward FFT of the
+    edge-padded signal is computed once so an auto-scan over many deltas only
+    pays one inverse FFT per candidate. Gaussian (de)convolution preserves
+    band area, so the retrieved NO density is insensitive to delta.
+    """
+    n = sigma_fine.size
+    pad = min(n, 512)
+    extended = np.concatenate([
+        np.full(pad, sigma_fine[0]), sigma_fine, np.full(pad, sigma_fine[-1])
+    ])
+    forward = np.fft.rfft(extended)
+    freq = np.fft.rfftfreq(extended.size, d=step)
+
+    def adjust(delta_fwhm: float) -> np.ndarray:
+        if abs(delta_fwhm) < 1e-9:
+            return sigma_fine.copy()
+        gauss_sigma = abs(delta_fwhm) / 2.35482
+        kernel = np.exp(-2.0 * np.pi**2 * gauss_sigma**2 * freq**2)
+        if delta_fwhm > 0:
+            out = np.fft.irfft(forward * kernel, n=extended.size)
+        else:
+            out = np.fft.irfft(
+                forward * kernel / (kernel**2 + NO_FWHM_DECONV_REG), n=extended.size
+            )
+        return np.clip(out[pad:pad + n], 0.0, None)
+
+    return adjust
+
+
+# Per-CrossSectionData cache of (fine grid, resolution-adjust closure). Keyed
+# by object identity with the object retained, so time-series runs that reuse
+# one CrossSectionData across hundreds of frames pay the FFT setup once.
+_NO_SIGMA_FAMILY_CACHE: dict[int, tuple[CrossSectionData, np.ndarray, object]] = {}
+
+
+def _no_sigma_family_cached(cross_sections: CrossSectionData):
+    cached = _NO_SIGMA_FAMILY_CACHE.get(id(cross_sections))
+    if cached is not None and cached[0] is cross_sections:
+        return cached[1], cached[2]
+
+    index_no = cross_sections.species.index("NO")
+    fine_grid = np.arange(
+        cross_sections.wavelengths.min(),
+        cross_sections.wavelengths.max() + NO_FWHM_FINE_STEP / 2,
+        NO_FWHM_FINE_STEP,
+    )
+    sigma_fine = np.interp(
+        fine_grid, cross_sections.wavelengths, cross_sections.values[:, index_no]
+    )
+    adjust = _resolution_adjust_family(sigma_fine, NO_FWHM_FINE_STEP)
+
+    if len(_NO_SIGMA_FAMILY_CACHE) >= 4:
+        _NO_SIGMA_FAMILY_CACHE.pop(next(iter(_NO_SIGMA_FAMILY_CACHE)))
+    _NO_SIGMA_FAMILY_CACHE[id(cross_sections)] = (cross_sections, fine_grid, adjust)
+    return fine_grid, adjust
+
+
+def _match_no_basis_column(
     wavelengths: np.ndarray,
     absorbance: np.ndarray,
     cross_sections: CrossSectionData,
-) -> tuple[np.ndarray | None, dict[str, float]]:
-    """Re-evaluate the NO cross-section column on a per-band shifted wavelength
-    axis. Between accepted band centers the shift is linearly interpolated;
-    outside it is held constant. Returns (None, {}) when no band qualifies,
-    leaving the fit identical to the unaligned behaviour.
+    fwhm_mode: str = DEFAULT_NO_FWHM_MODE,
+    fwhm_delta: float = DEFAULT_NO_FWHM_DELTA,
+) -> tuple[np.ndarray | None, dict[str, float], float | None]:
+    """Match the NO cross-section column to the measured gamma bands.
+
+    Two-stage, in this order:
+      1. wavelength shift — per-band cross-correlation (always attempted);
+      2. resolution — Gaussian FWHM delta relative to the tabulated sigma,
+         either scanned automatically ("auto"), taken from the user
+         ("manual"), or skipped ("off"). Shifts are re-estimated at every
+         candidate delta so the two never fight each other.
+
+    Candidates are ranked by (number of accepted bands, mean band
+    correlation); within NO_FWHM_TIE_TOLERANCE of the best correlation the
+    smallest |delta| wins, so a spectrometer that already matches the
+    tabulated resolution keeps delta = 0 exactly.
+
+    Returns (aligned column at `wavelengths`, per-band shift info,
+    chosen delta) — or (None, {}, None) when no band qualifies, leaving the
+    fit identical to the unmatched behaviour.
     """
     if "NO" not in cross_sections.species:
-        return None, {}
+        return None, {}, None
 
-    index_no = cross_sections.species.index("NO")
-    cross_no = cross_sections.values[:, index_no]
+    fine_grid, adjust = _no_sigma_family_cached(cross_sections)
 
-    accepted: list[tuple[float, float]] = []
-    info: dict[str, float] = {}
-    for center, low, high in NO_GAMMA_BAND_WINDOWS:
-        estimate = _estimate_no_band_shift(
-            wavelengths, absorbance, cross_sections.wavelengths, cross_no, low, high
-        )
-        if estimate is None:
-            continue
-        shift, _corr = estimate
-        accepted.append((center, shift))
-        info[f"{center:.0f}"] = round(shift, 3)
+    if fwhm_mode == "manual":
+        delta_candidates = [float(np.clip(fwhm_delta, NO_FWHM_DELTA_MIN, NO_FWHM_DELTA_MAX))]
+    elif fwhm_mode == "auto":
+        delta_candidates = list(np.arange(
+            NO_FWHM_DELTA_MIN, NO_FWHM_DELTA_MAX + NO_FWHM_SCAN_STEP / 2, NO_FWHM_SCAN_STEP
+        ))
+        delta_candidates = sorted(set(round(d, 4) for d in delta_candidates) | {0.0})
+    else:  # "off" — wavelength shift only, on the tabulated resolution
+        delta_candidates = [0.0]
 
-    if not accepted:
-        return None, {}
+    evaluated: list[tuple[int, float, float, list[tuple[float, float]]]] = []
+    for delta in delta_candidates:
+        sigma_adj = adjust(delta)
+        accepted: list[tuple[float, float]] = []
+        correlations: list[float] = []
+        for center, low, high in NO_GAMMA_BAND_WINDOWS:
+            estimate = _estimate_no_band_shift(
+                wavelengths, absorbance, fine_grid, sigma_adj, low, high
+            )
+            if estimate is None:
+                continue
+            shift, corr = estimate
+            accepted.append((center, shift))
+            correlations.append(corr)
+        if accepted:
+            evaluated.append(
+                (len(accepted), float(np.mean(correlations)), float(delta), accepted)
+            )
+
+    if not evaluated:
+        return None, {}, None
+
+    max_bands = max(item[0] for item in evaluated)
+    contenders = [item for item in evaluated if item[0] == max_bands]
+    best_corr = max(item[1] for item in contenders)
+    within_tol = [
+        item for item in contenders if item[1] >= best_corr - NO_FWHM_TIE_TOLERANCE
+    ]
+    _, _, chosen_delta, accepted = min(within_tol, key=lambda item: abs(item[2]))
+    chosen_delta = 0.0 if chosen_delta == 0 else chosen_delta  # normalise -0.0
+
+    sigma_final = adjust(chosen_delta)
+    info: dict[str, float] = {
+        f"{center:.0f}": round(shift, 3) for center, shift in accepted
+    }
 
     if len(accepted) == 1:
         shift_of_wl = np.full(wavelengths.size, accepted[0][1])
@@ -495,12 +620,12 @@ def _align_no_basis_column(
 
     aligned = np.interp(
         wavelengths + shift_of_wl,
-        cross_sections.wavelengths,
-        cross_no,
+        fine_grid,
+        sigma_final,
         left=0.0,
         right=0.0,
     )
-    return aligned, info
+    return aligned, info, (chosen_delta if fwhm_mode != "off" else None)
 
 
 def _find_local_maxima(values: np.ndarray) -> np.ndarray:
@@ -908,13 +1033,19 @@ def run_linear_regression(
     basis = align_cross_sections(cross_sections, absorbance.wavelengths)
 
     no_align_shifts: dict[str, float] = {}
+    no_fwhm_delta: float | None = None
     if cfg.align_no_bands and "NO" in cross_sections.species:
-        aligned_no, align_info = _align_no_basis_column(
-            absorbance.wavelengths, absorbance.values, cross_sections
+        aligned_no, align_info, chosen_delta = _match_no_basis_column(
+            absorbance.wavelengths,
+            absorbance.values,
+            cross_sections,
+            fwhm_mode=cfg.no_fwhm_mode,
+            fwhm_delta=cfg.no_fwhm_delta,
         )
         if aligned_no is not None:
             basis[:, cross_sections.species.index("NO")] = aligned_no
             no_align_shifts = align_info
+            no_fwhm_delta = chosen_delta
 
     coefficients, _ = _fit_nnls_scaled(
         basis,
@@ -1025,6 +1156,7 @@ def run_linear_regression(
         hono_exceed=hono_exceed,
         excluded_species=[cross_sections.species[index] for index in excluded_indices],
         no_align_shifts=no_align_shifts,
+        no_fwhm_delta=no_fwhm_delta,
     )
 
 

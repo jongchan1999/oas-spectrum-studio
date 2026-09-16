@@ -1116,6 +1116,7 @@ def render_diagnostics(
     hono_exceed: bool | None = None,
     excluded_species: list[str] | None = None,
     no_align_shifts: dict | None = None,
+    no_fwhm_delta: float | None = None,
 ) -> None:
     chips = []
     if repeat_count is not None:
@@ -1124,6 +1125,8 @@ def render_diagnostics(
         shift_text = " / ".join(
             f"{band} nm {shift:+.2f}" for band, shift in no_align_shifts.items()
         )
+        if no_fwhm_delta is not None:
+            shift_text += f" · ΔFWHM {no_fwhm_delta:+.2f} nm"
         chips.append(f"<span class='chip chip-accent'>NO align: {shift_text}</span>")
     if clip_applied is not None:
         chips.append(
@@ -1165,12 +1168,14 @@ def _set_o3_mode(mode: str) -> None:
 # key. The sliders are created WITHOUT a `value=` argument and read straight
 # from session_state, so the reset callback only has to write these back —
 # which reliably re-syncs both the value AND the slider thumb on rerun.
-_FIT_CONFIG_DEFAULTS: dict[str, float | int | bool] = {
+_FIT_CONFIG_DEFAULTS: dict[str, float | int | bool | str] = {
     "cfg_min_fit_fraction": float(DEFAULT_MIN_FIT_FRACTION),
     "cfg_od_avg_coeff": float(DEFAULT_OD_AVG_COEFF),
     "cfg_od_clip_threshold": float(DEFAULT_OD_CLIP_THRESHOLD),
     "cfg_max_repeat": int(DEFAULT_MAX_REPEAT),
     "cfg_align_no_bands": True,
+    "cfg_no_fwhm_mode": "Auto",
+    "cfg_no_fwhm_delta": 0.0,
 }
 
 
@@ -1248,6 +1253,27 @@ def render_sidebar() -> tuple[str, FitConfig]:
                       "to ±0.5 nm before fitting. Only engages when a clear NO band is "
                       "present; other species are unaffected."),
             )
+            no_fwhm_mode_label = st.selectbox(
+                "NO resolution (ΔFWHM) matching",
+                options=["Auto", "Manual", "Off"],
+                key="cfg_no_fwhm_mode",
+                disabled=not align_no_bands,
+                help=("Match the NO cross-section resolution to your spectrometer. "
+                      "ΔFWHM is relative to the built-in cross section: positive "
+                      "broadens (lower-resolution instrument), negative sharpens "
+                      "(higher-resolution instrument, regularised deconvolution). "
+                      "Auto scans ΔFWHM and keeps 0 when the built-in resolution "
+                      "already matches. Runs after the wavelength shift is fixed; "
+                      "band area — and the NO density — is preserved."),
+            )
+            no_fwhm_delta = st.number_input(
+                "Manual ΔFWHM vs. built-in σ (nm)",
+                min_value=-0.35, max_value=1.5, step=0.05, format="%.2f",
+                key="cfg_no_fwhm_delta",
+                disabled=(not align_no_bands) or no_fwhm_mode_label != "Manual",
+                help=("Used only in Manual mode. Example: your spectrometer resolves "
+                      "0.3 nm worse than the built-in σ → enter +0.30."),
+            )
 
             o3_mode = st.session_state.setdefault("o3_mode", "off")
             bcols = st.columns(2)
@@ -1287,6 +1313,8 @@ def render_sidebar() -> tuple[str, FitConfig]:
             no_o3_ratio=float(DEFAULT_NO_O3_RATIO),
             no_o3_density_threshold=float(DEFAULT_NO_O3_DENSITY_THRESHOLD),
             align_no_bands=bool(align_no_bands),
+            no_fwhm_mode=str(no_fwhm_mode_label).lower(),
+            no_fwhm_delta=float(no_fwhm_delta),
         )
 
         st.markdown("---")
@@ -1408,6 +1436,7 @@ def run_single_analysis(
                 "hono_exceed": bool(result.regression.hono_exceed),
                 "excluded_species": list(result.regression.excluded_species),
                 "no_align_shifts": dict(result.regression.no_align_shifts or {}),
+                "no_fwhm_delta": result.regression.no_fwhm_delta,
             },
             "_native": result,
         }
@@ -1903,6 +1932,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         "hono_exceed": s.regression.hono_exceed,
                         "excluded_species": s.regression.excluded_species,
                         "no_align_shifts": dict(s.regression.no_align_shifts or {}),
+                        "no_fwhm_delta": s.regression.no_fwhm_delta,
                     }
                 else:
                     m = ts_payload["single_results"][sel]
