@@ -37,6 +37,7 @@ class RegressionResult:
     clip_applied: bool
     hono_exceed: bool
     excluded_species: list[str]
+    no_align_shifts: dict[str, float] | None = None
 
 
 @dataclass
@@ -77,6 +78,20 @@ DEFAULT_MAX_REPEAT = 5
 DEFAULT_NO_O3_RULE = "ratio"
 DEFAULT_NO_O3_RATIO = 20.0
 DEFAULT_NO_O3_DENSITY_THRESHOLD = 3.0e14
+DEFAULT_ALIGN_NO_BANDS = True
+
+# NO gamma-band auto-alignment: the sharp gamma(1,0)/gamma(0,0) bands are the
+# only sub-nm features in the 210-400 nm fit range, so a small wavelength
+# mismatch between the tabulated NO cross section and the spectrometer axis
+# ruins the NO fit while leaving the broadband species untouched.
+NO_GAMMA_BAND_WINDOWS: tuple[tuple[float, float, float], ...] = (
+    (215.0, 213.0, 217.0),  # gamma(1,0): band center, window low, window high
+    (226.2, 224.0, 228.0),  # gamma(0,0)
+)
+NO_ALIGN_MAX_SHIFT_NM = 0.5
+NO_ALIGN_SHIFT_STEP_NM = 0.02
+NO_ALIGN_MIN_CORRELATION = 0.8
+NO_ALIGN_MIN_POINTS = 8
 
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
@@ -95,6 +110,7 @@ class FitConfig:
     no_o3_rule: str = DEFAULT_NO_O3_RULE                       # "ratio" | "o3_density" | "off"
     no_o3_ratio: float = DEFAULT_NO_O3_RATIO
     no_o3_density_threshold: float = DEFAULT_NO_O3_DENSITY_THRESHOLD
+    align_no_bands: bool = DEFAULT_ALIGN_NO_BANDS
 
 
 def _decode_text(raw: bytes) -> str:
@@ -388,6 +404,103 @@ def _suppress_false_positives(
     updated = np.zeros_like(coefficients)
     updated[keep_cols] = fitted_keep
     return updated, excluded_cols
+
+
+def _estimate_no_band_shift(
+    wavelengths: np.ndarray,
+    absorbance: np.ndarray,
+    cross_wavelengths: np.ndarray,
+    cross_no: np.ndarray,
+    window_low: float,
+    window_high: float,
+) -> tuple[float, float] | None:
+    """Best wavelength shift of the NO cross section against the measured OD
+    inside one gamma-band window, found by normalised cross-correlation.
+
+    Returns (shift_nm, correlation), or None when the band is absent/too noisy
+    (low correlation) or the optimum pins at the search edge.
+    """
+    mask = (wavelengths >= window_low) & (wavelengths <= window_high)
+    if int(mask.sum()) < NO_ALIGN_MIN_POINTS:
+        return None
+
+    window_wl = wavelengths[mask]
+    od_centered = absorbance[mask] - float(np.mean(absorbance[mask]))
+    od_norm = float(np.sqrt(np.sum(od_centered**2)))
+    if od_norm <= 0.0:
+        return None
+
+    shifts = np.arange(
+        -NO_ALIGN_MAX_SHIFT_NM,
+        NO_ALIGN_MAX_SHIFT_NM + NO_ALIGN_SHIFT_STEP_NM / 2,
+        NO_ALIGN_SHIFT_STEP_NM,
+    )
+    best_shift = 0.0
+    best_corr = -np.inf
+    for shift in shifts:
+        sigma = np.interp(window_wl + shift, cross_wavelengths, cross_no)
+        sigma_centered = sigma - float(np.mean(sigma))
+        sigma_norm = float(np.sqrt(np.sum(sigma_centered**2)))
+        if sigma_norm <= 0.0:
+            continue
+        corr = float(np.dot(od_centered, sigma_centered) / (od_norm * sigma_norm))
+        if corr > best_corr:
+            best_corr = corr
+            best_shift = float(shift)
+
+    if best_corr < NO_ALIGN_MIN_CORRELATION:
+        return None
+    if abs(best_shift) >= NO_ALIGN_MAX_SHIFT_NM - NO_ALIGN_SHIFT_STEP_NM / 2:
+        return None
+    return best_shift, best_corr
+
+
+def _align_no_basis_column(
+    wavelengths: np.ndarray,
+    absorbance: np.ndarray,
+    cross_sections: CrossSectionData,
+) -> tuple[np.ndarray | None, dict[str, float]]:
+    """Re-evaluate the NO cross-section column on a per-band shifted wavelength
+    axis. Between accepted band centers the shift is linearly interpolated;
+    outside it is held constant. Returns (None, {}) when no band qualifies,
+    leaving the fit identical to the unaligned behaviour.
+    """
+    if "NO" not in cross_sections.species:
+        return None, {}
+
+    index_no = cross_sections.species.index("NO")
+    cross_no = cross_sections.values[:, index_no]
+
+    accepted: list[tuple[float, float]] = []
+    info: dict[str, float] = {}
+    for center, low, high in NO_GAMMA_BAND_WINDOWS:
+        estimate = _estimate_no_band_shift(
+            wavelengths, absorbance, cross_sections.wavelengths, cross_no, low, high
+        )
+        if estimate is None:
+            continue
+        shift, _corr = estimate
+        accepted.append((center, shift))
+        info[f"{center:.0f}"] = round(shift, 3)
+
+    if not accepted:
+        return None, {}
+
+    if len(accepted) == 1:
+        shift_of_wl = np.full(wavelengths.size, accepted[0][1])
+    else:
+        centers = np.array([item[0] for item in accepted])
+        shifts = np.array([item[1] for item in accepted])
+        shift_of_wl = np.interp(wavelengths, centers, shifts)
+
+    aligned = np.interp(
+        wavelengths + shift_of_wl,
+        cross_sections.wavelengths,
+        cross_no,
+        left=0.0,
+        right=0.0,
+    )
+    return aligned, info
 
 
 def _find_local_maxima(values: np.ndarray) -> np.ndarray:
@@ -793,6 +906,16 @@ def run_linear_regression(
 ) -> RegressionResult:
     cfg = config or FitConfig()
     basis = align_cross_sections(cross_sections, absorbance.wavelengths)
+
+    no_align_shifts: dict[str, float] = {}
+    if cfg.align_no_bands and "NO" in cross_sections.species:
+        aligned_no, align_info = _align_no_basis_column(
+            absorbance.wavelengths, absorbance.values, cross_sections
+        )
+        if aligned_no is not None:
+            basis[:, cross_sections.species.index("NO")] = aligned_no
+            no_align_shifts = align_info
+
     coefficients, _ = _fit_nnls_scaled(
         basis,
         absorbance.values,
@@ -901,6 +1024,7 @@ def run_linear_regression(
         clip_applied=clip_applied,
         hono_exceed=hono_exceed,
         excluded_species=[cross_sections.species[index] for index in excluded_indices],
+        no_align_shifts=no_align_shifts,
     )
 
 

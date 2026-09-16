@@ -1115,10 +1115,16 @@ def render_diagnostics(
     clip_applied: bool | None = None,
     hono_exceed: bool | None = None,
     excluded_species: list[str] | None = None,
+    no_align_shifts: dict | None = None,
 ) -> None:
     chips = []
     if repeat_count is not None:
         chips.append(f"<span class='chip'>Refit iterations: {repeat_count}</span>")
+    if no_align_shifts:
+        shift_text = " / ".join(
+            f"{band} nm {shift:+.2f}" for band, shift in no_align_shifts.items()
+        )
+        chips.append(f"<span class='chip chip-accent'>NO align: {shift_text}</span>")
     if clip_applied is not None:
         chips.append(
             f"<span class='chip {'chip-accent' if clip_applied else ''}'>"
@@ -1159,11 +1165,12 @@ def _set_o3_mode(mode: str) -> None:
 # key. The sliders are created WITHOUT a `value=` argument and read straight
 # from session_state, so the reset callback only has to write these back —
 # which reliably re-syncs both the value AND the slider thumb on rerun.
-_FIT_CONFIG_DEFAULTS: dict[str, float | int] = {
+_FIT_CONFIG_DEFAULTS: dict[str, float | int | bool] = {
     "cfg_min_fit_fraction": float(DEFAULT_MIN_FIT_FRACTION),
     "cfg_od_avg_coeff": float(DEFAULT_OD_AVG_COEFF),
     "cfg_od_clip_threshold": float(DEFAULT_OD_CLIP_THRESHOLD),
     "cfg_max_repeat": int(DEFAULT_MAX_REPEAT),
+    "cfg_align_no_bands": True,
 }
 
 
@@ -1233,6 +1240,14 @@ def render_sidebar() -> tuple[str, FitConfig]:
                 "Max refit iterations", 0, 10, step=1,
                 key="cfg_max_repeat",
             )
+            align_no_bands = st.checkbox(
+                "NO γ-band auto-alignment",
+                key="cfg_align_no_bands",
+                help=("Cross-correlate the sharp NO γ(1,0)/γ(0,0) bands (≈215/226 nm) "
+                      "against the measured OD and re-align the NO cross section by up "
+                      "to ±0.5 nm before fitting. Only engages when a clear NO band is "
+                      "present; other species are unaffected."),
+            )
 
             o3_mode = st.session_state.setdefault("o3_mode", "off")
             bcols = st.columns(2)
@@ -1271,6 +1286,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             no_o3_rule=("ratio" if o3_mode == "standard" else "off"),
             no_o3_ratio=float(DEFAULT_NO_O3_RATIO),
             no_o3_density_threshold=float(DEFAULT_NO_O3_DENSITY_THRESHOLD),
+            align_no_bands=bool(align_no_bands),
         )
 
         st.markdown("---")
@@ -1391,6 +1407,7 @@ def run_single_analysis(
                 "clip_applied": bool(result.regression.clip_applied),
                 "hono_exceed": bool(result.regression.hono_exceed),
                 "excluded_species": list(result.regression.excluded_species),
+                "no_align_shifts": dict(result.regression.no_align_shifts or {}),
             },
             "_native": result,
         }
@@ -1885,6 +1902,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         "clip_applied": s.regression.clip_applied,
                         "hono_exceed": s.regression.hono_exceed,
                         "excluded_species": s.regression.excluded_species,
+                        "no_align_shifts": dict(s.regression.no_align_shifts or {}),
                     }
                 else:
                     m = ts_payload["single_results"][sel]
