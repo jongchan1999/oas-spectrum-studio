@@ -12,5 +12,6 @@ torch>=2.2,<3
 torchvision>=0.17,<1
 pillow>=10.2
 
-# build-stamp: 2026-09-16b full rebuild for default change
+# build-stamp: v1.3 release
+
 

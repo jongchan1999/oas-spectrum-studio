@@ -835,6 +835,10 @@ def _fit_config_dict(config: FitConfig) -> dict:
         "no_o3_rule": str(config.no_o3_rule),
         "no_o3_ratio": float(config.no_o3_ratio),
         "no_o3_density_threshold": float(config.no_o3_density_threshold),
+        "align_no_bands": bool(config.align_no_bands),
+        "no_fwhm_mode": str(config.no_fwhm_mode),
+        "no_fwhm_delta": float(config.no_fwhm_delta),
+        "no_peak_emphasis": float(config.no_peak_emphasis),
     }
 
 
@@ -1213,7 +1217,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             <div class="brand-mark">
                 <span class="brand-logo">⚛</span>
                 <span class="brand-name">OAS Studio</span>
-                <span class="brand-version">v1.2</span>
+                <span class="brand-version">v1.3</span>
             </div>
             <div class="brand-tagline">Optical Absorption Spectroscopy</div>
         </div>

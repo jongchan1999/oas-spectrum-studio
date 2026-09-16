@@ -33,7 +33,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 2
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 
 
 def _finite_xy(x, y) -> tuple[list[float], list[float]]:
