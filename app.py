@@ -16,6 +16,7 @@ from oas_web.analysis import (
     DEFAULT_NO_O3_DENSITY_THRESHOLD,
     DEFAULT_NO_O3_RATIO,
     DEFAULT_NO_O3_RULE,
+    DEFAULT_NO_PEAK_EMPHASIS,
     DEFAULT_OD_AVG_COEFF,
     DEFAULT_OD_CLIP_THRESHOLD,
     FitConfig,
@@ -1117,6 +1118,7 @@ def render_diagnostics(
     excluded_species: list[str] | None = None,
     no_align_shifts: dict | None = None,
     no_fwhm_delta: float | None = None,
+    no_band_scales: dict | None = None,
 ) -> None:
     chips = []
     if repeat_count is not None:
@@ -1128,6 +1130,11 @@ def render_diagnostics(
         if no_fwhm_delta is not None:
             shift_text += f" · ΔFWHM {no_fwhm_delta:+.2f} nm"
         chips.append(f"<span class='chip chip-accent'>NO align: {shift_text}</span>")
+    if no_band_scales:
+        scale_text = " / ".join(
+            f"{band} nm ×{scale:.2f}" for band, scale in no_band_scales.items()
+        )
+        chips.append(f"<span class='chip chip-accent'>NO band scale: {scale_text}</span>")
     if clip_applied is not None:
         chips.append(
             f"<span class='chip {'chip-accent' if clip_applied else ''}'>"
@@ -1176,6 +1183,7 @@ _FIT_CONFIG_DEFAULTS: dict[str, float | int | bool | str] = {
     "cfg_align_no_bands": True,
     "cfg_no_fwhm_mode": "Auto",
     "cfg_no_fwhm_delta": 0.0,
+    "cfg_no_peak_emphasis": float(DEFAULT_NO_PEAK_EMPHASIS),
 }
 
 
@@ -1274,6 +1282,16 @@ def render_sidebar() -> tuple[str, FitConfig]:
                 help=("Used only in Manual mode. Example: your spectrometer resolves "
                       "0.3 nm worse than the built-in σ → enter +0.30."),
             )
+            no_peak_emphasis = st.slider(
+                "NO peak emphasis", 0.0, 1.0, step=0.1,
+                key="cfg_no_peak_emphasis",
+                disabled=not align_no_bands,
+                help=("After the global fit, re-scale each NO γ band to its own "
+                      "amplitude: 0 keeps the global least-squares fit (band tops "
+                      "may sit low), 1 matches the measured peak tops exactly "
+                      "(band wings may overshoot). The reported NO density follows "
+                      "the γ(0,0) 226 nm band."),
+            )
 
             o3_mode = st.session_state.setdefault("o3_mode", "off")
             bcols = st.columns(2)
@@ -1315,6 +1333,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             align_no_bands=bool(align_no_bands),
             no_fwhm_mode=str(no_fwhm_mode_label).lower(),
             no_fwhm_delta=float(no_fwhm_delta),
+            no_peak_emphasis=float(no_peak_emphasis),
         )
 
         st.markdown("---")
@@ -1437,6 +1456,7 @@ def run_single_analysis(
                 "excluded_species": list(result.regression.excluded_species),
                 "no_align_shifts": dict(result.regression.no_align_shifts or {}),
                 "no_fwhm_delta": result.regression.no_fwhm_delta,
+                "no_band_scales": dict(result.regression.no_band_scales or {}),
             },
             "_native": result,
         }
@@ -1933,6 +1953,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         "excluded_species": s.regression.excluded_species,
                         "no_align_shifts": dict(s.regression.no_align_shifts or {}),
                         "no_fwhm_delta": s.regression.no_fwhm_delta,
+                        "no_band_scales": dict(s.regression.no_band_scales or {}),
                     }
                 else:
                     m = ts_payload["single_results"][sel]

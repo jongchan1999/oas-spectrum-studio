@@ -39,6 +39,7 @@ class RegressionResult:
     excluded_species: list[str]
     no_align_shifts: dict[str, float] | None = None
     no_fwhm_delta: float | None = None
+    no_band_scales: dict[str, float] | None = None
 
 
 @dataclass
@@ -110,6 +111,20 @@ NO_FWHM_TIE_TOLERANCE = 0.003          # prefer delta=0 within this corr margin
 NO_FWHM_DECONV_REG = 1e-3              # Wiener regularisation for delta < 0
 NO_FWHM_FINE_STEP = 0.02               # nm, uniform grid for the FFT ops
 
+# NO peak-emphasis refinement: with one global NO coefficient, the least-squares
+# fit trades the gamma(1,0)/gamma(0,0) band tops against their wings and the
+# other band, so tall peaks come out systematically low whenever the tabulated
+# band shapes or their intensity ratio deviate from the measurement. As a final
+# step, re-scale each accepted gamma band to its own amplitude — a blend
+# (beta) between the in-band least-squares amplitude (beta=0.001…) and the
+# exact peak-matched amplitude (beta=1) — then refit the other species to the
+# remaining signal. beta=0 disables the step entirely (previous behaviour).
+DEFAULT_NO_PEAK_EMPHASIS = 0.5
+NO_PEAK_BLEND_LOW_NM = 219.5           # smooth hand-over between the two bands
+NO_PEAK_BLEND_HIGH_NM = 221.5
+NO_PEAK_SCALE_MIN = 0.5                # per-band amplitude clip vs joint coefficient
+NO_PEAK_SCALE_MAX = 2.0
+
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
 OD_AVG_COEFF = DEFAULT_OD_AVG_COEFF
@@ -130,6 +145,7 @@ class FitConfig:
     align_no_bands: bool = DEFAULT_ALIGN_NO_BANDS
     no_fwhm_mode: str = DEFAULT_NO_FWHM_MODE                   # "auto" | "manual" | "off"
     no_fwhm_delta: float = DEFAULT_NO_FWHM_DELTA               # nm, manual mode only
+    no_peak_emphasis: float = DEFAULT_NO_PEAK_EMPHASIS         # 0 (off) … 1 (match peaks)
 
 
 def _decode_text(raw: bytes) -> str:
@@ -626,6 +642,108 @@ def _match_no_basis_column(
         right=0.0,
     )
     return aligned, info, (chosen_delta if fwhm_mode != "off" else None)
+
+
+def _refine_no_band_amplitudes(
+    basis: np.ndarray,
+    wavelengths: np.ndarray,
+    absorbance: np.ndarray,
+    coefficients: np.ndarray,
+    species: list[str],
+    excluded_indices: list[int],
+    fit_indices: np.ndarray,
+    accepted_bands: dict[str, float],
+    beta: float,
+    min_fit_fraction: float,
+) -> tuple[np.ndarray, dict[str, float]]:
+    """Per-band NO amplitude refinement (peak emphasis).
+
+    For each accepted gamma band, estimate the NO amplitude from the
+    NO-free residual: a blend (beta) of the in-band least-squares amplitude
+    and the exact peak-matched amplitude. The NO basis column is re-scaled
+    per band (smooth hand-over between the bands), anchored so the NO
+    coefficient — and the reported density — tracks the strongest accepted
+    band; the other species are then refit against the remaining signal.
+    Modifies `basis` in place and returns (updated coefficients,
+    {band: applied scale relative to the joint fit}). Returns unchanged
+    inputs when the gate fails.
+    """
+    if beta <= 0.0 or "NO" not in species or not accepted_bands:
+        return coefficients, {}
+    index_no = species.index("NO")
+    if index_no in excluded_indices or coefficients[index_no] <= 0.0:
+        return coefficients, {}
+
+    joint_coeff = float(coefficients[index_no])
+    no_unit = basis[:, index_no]
+    reconstructed_others = basis @ coefficients - no_unit * joint_coeff
+    residual_no = absorbance - reconstructed_others
+
+    band_targets: list[tuple[float, float]] = []   # (band center, target amplitude)
+    for center, low, high in NO_GAMMA_BAND_WINDOWS:
+        if f"{center:.0f}" not in accepted_bands:
+            continue
+        mask = (wavelengths >= low) & (wavelengths <= high)
+        if int(mask.sum()) < NO_ALIGN_MIN_POINTS:
+            continue
+        column = no_unit[mask]
+        column_max = float(np.max(column))
+        if column_max <= 0.0:
+            continue
+        residual_band = residual_no[mask]
+        a_lsq = float(np.clip((column @ residual_band) / (column @ column), 0.0, None))
+        a_peak = float(np.clip(np.max(residual_band) / column_max, 0.0, None))
+        target = (1.0 - beta) * a_lsq + beta * a_peak
+        target = float(np.clip(
+            target, NO_PEAK_SCALE_MIN * joint_coeff, NO_PEAK_SCALE_MAX * joint_coeff
+        ))
+        band_targets.append((center, target))
+
+    if not band_targets:
+        return coefficients, {}
+
+    if len(band_targets) == 1:
+        target_field = np.full(wavelengths.size, band_targets[0][1])
+        anchor = band_targets[0][1]
+    else:
+        low_target = band_targets[0][1]
+        high_target = band_targets[-1][1]
+        blend = np.clip(
+            (wavelengths - NO_PEAK_BLEND_LOW_NM)
+            / (NO_PEAK_BLEND_HIGH_NM - NO_PEAK_BLEND_LOW_NM),
+            0.0, 1.0,
+        )
+        target_field = low_target * (1.0 - blend) + high_target * blend
+        anchor = high_target   # gamma(0,0) — strongest band, best SNR
+
+    if anchor <= 0.0:
+        return coefficients, {}
+
+    # Bake the per-band scaling into the NO column so that
+    # basis @ coefficients stays the reconstruction, then refit the others.
+    basis[:, index_no] = no_unit * (target_field / anchor)
+
+    keep_cols = np.array(
+        [i for i in range(basis.shape[1]) if i != index_no and i not in excluded_indices],
+        dtype=int,
+    )
+    updated = np.zeros_like(coefficients)
+    updated[index_no] = anchor
+    if keep_cols.size > 0:
+        fit_idx = np.asarray(fit_indices, dtype=int)
+        remaining = absorbance - basis[:, index_no] * anchor
+        fitted_others, _ = _fit_nnls_scaled(
+            basis[fit_idx][:, keep_cols],
+            remaining[fit_idx],
+            total_count=absorbance.size,
+            min_fit_fraction=min_fit_fraction,
+        )
+        updated[keep_cols] = fitted_others
+
+    scales = {
+        f"{center:.0f}": round(target / joint_coeff, 3) for center, target in band_targets
+    }
+    return updated, scales
 
 
 def _find_local_maxima(values: np.ndarray) -> np.ndarray:
@@ -1133,6 +1251,21 @@ def run_linear_regression(
             repeat_count += 1
         excluded_indices = sorted(excluded_set)
 
+    no_band_scales: dict[str, float] = {}
+    if no_align_shifts and cfg.no_peak_emphasis > 0.0:
+        coefficients, no_band_scales = _refine_no_band_amplitudes(
+            basis=basis,
+            wavelengths=absorbance.wavelengths,
+            absorbance=absorbance.values,
+            coefficients=coefficients,
+            species=cross_sections.species,
+            excluded_indices=list(excluded_indices),
+            fit_indices=fit_indices,
+            accepted_bands=no_align_shifts,
+            beta=float(np.clip(cfg.no_peak_emphasis, 0.0, 1.0)),
+            min_fit_fraction=cfg.min_fit_fraction,
+        )
+
     hono_exceed = _evaluate_hono_exceed(
         basis=basis,
         absorbance=absorbance.values,
@@ -1157,6 +1290,7 @@ def run_linear_regression(
         excluded_species=[cross_sections.species[index] for index in excluded_indices],
         no_align_shifts=no_align_shifts,
         no_fwhm_delta=no_fwhm_delta,
+        no_band_scales=no_band_scales,
     )
 
 
