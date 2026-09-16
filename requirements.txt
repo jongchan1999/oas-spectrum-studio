@@ -11,3 +11,5 @@ plotly>=5.20
 torch>=2.2,<3
 torchvision>=0.17,<1
 pillow>=10.2
+
+# build-stamp: 2026-09-16 force full container rebuild (stale module cache after 6e20eee)
