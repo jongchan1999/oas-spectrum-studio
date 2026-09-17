@@ -839,6 +839,7 @@ def _fit_config_dict(config: FitConfig) -> dict:
         "no_fwhm_mode": str(config.no_fwhm_mode),
         "no_fwhm_delta": float(config.no_fwhm_delta),
         "no_peak_emphasis": float(config.no_peak_emphasis),
+        "no_hot_band": bool(config.no_hot_band),
     }
 
 
@@ -1123,6 +1124,7 @@ def render_diagnostics(
     no_align_shifts: dict | None = None,
     no_fwhm_delta: float | None = None,
     no_band_scales: dict | None = None,
+    no_hot_ratio: float | None = None,
 ) -> None:
     chips = []
     if repeat_count is not None:
@@ -1139,6 +1141,11 @@ def render_diagnostics(
             f"{band} nm ×{scale:.2f}" for band, scale in no_band_scales.items()
         )
         chips.append(f"<span class='chip chip-accent'>NO band scale: {scale_text}</span>")
+    if no_hot_ratio is not None:
+        chips.append(
+            f"<span class='chip chip-accent'>NO hot band (v″=1): "
+            f"{no_hot_ratio:.2f}× cold</span>"
+        )
     if clip_applied is not None:
         chips.append(
             f"<span class='chip {'chip-accent' if clip_applied else ''}'>"
@@ -1188,6 +1195,7 @@ _FIT_CONFIG_DEFAULTS: dict[str, float | int | bool | str] = {
     "cfg_no_fwhm_mode": "Auto",
     "cfg_no_fwhm_delta": 0.0,
     "cfg_no_peak_emphasis": float(DEFAULT_NO_PEAK_EMPHASIS),
+    "cfg_no_hot_band": True,
 }
 
 
@@ -1296,6 +1304,18 @@ def render_sidebar() -> tuple[str, FitConfig]:
                       "(band wings may overshoot). The reported NO density follows "
                       "the γ(0,0) 226 nm band."),
             )
+            no_hot_band = st.checkbox(
+                "NO hot-band (v″=1) component",
+                key="cfg_no_hot_band",
+                disabled=not align_no_bands,
+                help=("In hot plasmas vibrationally excited NO absorbs one X-state "
+                      "quantum (≈1876 cm⁻¹) to the red of each cold γ band — "
+                      "γ(1,1)≈224 nm, γ(0,1)≈236 nm — which the room-temperature "
+                      "cross section misses. When the residual shows these bands, "
+                      "fit them with a wavenumber-shifted, broadened copy of the "
+                      "NO cross section. Engages only when a clear correlation is "
+                      "present; the hot/cold amplitude ratio is shown as a chip."),
+            )
 
             o3_mode = st.session_state.setdefault("o3_mode", "off")
             bcols = st.columns(2)
@@ -1338,6 +1358,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             no_fwhm_mode=str(no_fwhm_mode_label).lower(),
             no_fwhm_delta=float(no_fwhm_delta),
             no_peak_emphasis=float(no_peak_emphasis),
+            no_hot_band=bool(no_hot_band),
         )
 
         st.markdown("---")
@@ -1461,6 +1482,7 @@ def run_single_analysis(
                 "no_align_shifts": dict(result.regression.no_align_shifts or {}),
                 "no_fwhm_delta": result.regression.no_fwhm_delta,
                 "no_band_scales": dict(result.regression.no_band_scales or {}),
+                "no_hot_ratio": result.regression.no_hot_ratio,
             },
             "_native": result,
         }
@@ -1958,6 +1980,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         "no_align_shifts": dict(s.regression.no_align_shifts or {}),
                         "no_fwhm_delta": s.regression.no_fwhm_delta,
                         "no_band_scales": dict(s.regression.no_band_scales or {}),
+                        "no_hot_ratio": s.regression.no_hot_ratio,
                     }
                 else:
                     m = ts_payload["single_results"][sel]

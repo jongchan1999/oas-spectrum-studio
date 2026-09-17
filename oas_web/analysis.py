@@ -40,6 +40,7 @@ class RegressionResult:
     no_align_shifts: dict[str, float] | None = None
     no_fwhm_delta: float | None = None
     no_band_scales: dict[str, float] | None = None
+    no_hot_ratio: float | None = None
 
 
 @dataclass
@@ -125,6 +126,21 @@ NO_PEAK_BLEND_HIGH_NM = 221.5
 NO_PEAK_SCALE_MIN = 0.5                # per-band amplitude clip vs joint coefficient
 NO_PEAK_SCALE_MAX = 2.0
 
+# NO hot-band (v''=1) component: the tabulated NO cross section is a
+# room-temperature one (only v''=0 populated). In a hot plasma the v''=1
+# progression appears — gamma(1,1) ~224.2 nm, gamma(0,1) ~236.3 nm,
+# gamma(2,1) ~213.4 nm — exactly one X-state vibrational quantum
+# (Delta-G(1/2) ~= 1876 cm^-1) to the red of the cold gamma(1,0)/(0,0)/(2,0)
+# bands. Model it as the cold sigma shifted by -1876 cm^-1 in wavenumber and
+# Gaussian-broadened (hot rotational envelope), with a free non-negative
+# amplitude fitted to the NO-free residual inside the hot-band windows.
+DEFAULT_NO_HOT_BAND = True
+NO_HOT_SHIFT_CM1 = 1876.0
+NO_HOT_BROADEN_SCAN_NM = (1.0, 2.0, 3.0, 4.0)
+NO_HOT_WINDOWS = ((218.0, 226.3), (231.0, 239.0))
+NO_HOT_MIN_CORRELATION = 0.3
+NO_HOT_MAX_RATIO = 1.5                 # amplitude clip vs the cold NO coefficient
+
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
 OD_AVG_COEFF = DEFAULT_OD_AVG_COEFF
@@ -146,6 +162,7 @@ class FitConfig:
     no_fwhm_mode: str = DEFAULT_NO_FWHM_MODE                   # "auto" | "manual" | "off"
     no_fwhm_delta: float = DEFAULT_NO_FWHM_DELTA               # nm, manual mode only
     no_peak_emphasis: float = DEFAULT_NO_PEAK_EMPHASIS         # 0 (off) … 1 (match peaks)
+    no_hot_band: bool = DEFAULT_NO_HOT_BAND
 
 
 def _decode_text(raw: bytes) -> str:
@@ -642,6 +659,95 @@ def _match_no_basis_column(
         right=0.0,
     )
     return aligned, info, (chosen_delta if fwhm_mode != "off" else None)
+
+
+def _fit_no_hot_band(
+    basis: np.ndarray,
+    wavelengths: np.ndarray,
+    absorbance: np.ndarray,
+    coefficients: np.ndarray,
+    species: list[str],
+    excluded_indices: list[int],
+    fit_indices: np.ndarray,
+    cross_sections: CrossSectionData,
+    min_fit_fraction: float,
+) -> tuple[np.ndarray, float | None]:
+    """Add the NO(v''=1) hot-band component when the data supports it.
+
+    Builds candidate hot columns (cold sigma shifted -NO_HOT_SHIFT_CM1 in
+    wavenumber, Gaussian-broadened by each scan width), correlates them with
+    the current fit residual inside the hot-band windows, and — when the best
+    correlation clears the gate — folds the fitted non-negative hot amplitude
+    into the NO basis column and refits every non-excluded species. Modifies
+    `basis` in place; returns (updated coefficients, hot/cold amplitude
+    ratio) or the unchanged inputs and None when the gate fails.
+    """
+    if "NO" not in species:
+        return coefficients, None
+    index_no = species.index("NO")
+    if index_no in excluded_indices or coefficients[index_no] <= 0.0:
+        return coefficients, None
+
+    zone = np.zeros(wavelengths.size, dtype=bool)
+    for low, high in NO_HOT_WINDOWS:
+        zone |= (wavelengths >= low) & (wavelengths <= high)
+    if int(zone.sum()) < 2 * NO_ALIGN_MIN_POINTS:
+        return coefficients, None
+
+    residual = absorbance - basis @ coefficients
+    residual_zone = residual[zone]
+    res_centered = residual_zone - float(np.mean(residual_zone))
+    res_norm = float(np.sqrt(np.sum(res_centered**2)))
+    if res_norm <= 0.0:
+        return coefficients, None
+
+    fine_grid, adjust = _no_sigma_family_cached(cross_sections)
+    # wavelength whose wavenumber is nu(lambda) + shift: the cold band that the
+    # hot (v''=1) absorption at `lambda` mirrors.
+    lam_source = wavelengths / (1.0 + NO_HOT_SHIFT_CM1 * 1e-7 * wavelengths)
+
+    best: tuple[float, float, np.ndarray] | None = None   # (corr, broaden, column)
+    for broaden in NO_HOT_BROADEN_SCAN_NM:
+        column = np.interp(lam_source, fine_grid, adjust(broaden), left=0.0, right=0.0)
+        col_zone = column[zone]
+        col_centered = col_zone - float(np.mean(col_zone))
+        col_norm = float(np.sqrt(np.sum(col_centered**2)))
+        if col_norm <= 0.0:
+            continue
+        corr = float(np.dot(res_centered, col_centered) / (res_norm * col_norm))
+        if best is None or corr > best[0] + 1e-9:
+            best = (corr, broaden, column)
+
+    if best is None or best[0] < NO_HOT_MIN_CORRELATION:
+        return coefficients, None
+    _, _, hot_column = best
+
+    col_zone = hot_column[zone]
+    denom = float(col_zone @ col_zone)
+    if denom <= 0.0:
+        return coefficients, None
+    cold_coeff = float(coefficients[index_no])
+    amplitude = float(np.clip(
+        (col_zone @ residual_zone) / denom, 0.0, NO_HOT_MAX_RATIO * cold_coeff
+    ))
+    if amplitude <= 0.0:
+        return coefficients, None
+
+    basis[:, index_no] = basis[:, index_no] + hot_column * (amplitude / cold_coeff)
+
+    keep_cols = np.array(
+        [i for i in range(basis.shape[1]) if i not in excluded_indices], dtype=int
+    )
+    fit_idx = np.asarray(fit_indices, dtype=int)
+    fitted_keep, _ = _fit_nnls_scaled(
+        basis[fit_idx][:, keep_cols],
+        absorbance[fit_idx],
+        total_count=absorbance.size,
+        min_fit_fraction=min_fit_fraction,
+    )
+    updated = np.zeros_like(coefficients)
+    updated[keep_cols] = fitted_keep
+    return updated, round(amplitude / cold_coeff, 3)
 
 
 def _refine_no_band_amplitudes(
@@ -1251,6 +1357,20 @@ def run_linear_regression(
             repeat_count += 1
         excluded_indices = sorted(excluded_set)
 
+    no_hot_ratio: float | None = None
+    if cfg.no_hot_band and no_align_shifts:
+        coefficients, no_hot_ratio = _fit_no_hot_band(
+            basis=basis,
+            wavelengths=absorbance.wavelengths,
+            absorbance=absorbance.values,
+            coefficients=coefficients,
+            species=cross_sections.species,
+            excluded_indices=list(excluded_indices),
+            fit_indices=fit_indices,
+            cross_sections=cross_sections,
+            min_fit_fraction=cfg.min_fit_fraction,
+        )
+
     no_band_scales: dict[str, float] = {}
     if no_align_shifts and cfg.no_peak_emphasis > 0.0:
         coefficients, no_band_scales = _refine_no_band_amplitudes(
@@ -1291,6 +1411,7 @@ def run_linear_regression(
         no_align_shifts=no_align_shifts,
         no_fwhm_delta=no_fwhm_delta,
         no_band_scales=no_band_scales,
+        no_hot_ratio=no_hot_ratio,
     )
 
 
