@@ -41,6 +41,9 @@ class RegressionResult:
     no_fwhm_delta: float | None = None
     no_band_scales: dict[str, float] | None = None
     no_hot_ratio: float | None = None
+    baseline_od: np.ndarray | None = None
+    o3_wing_scale: float | None = None
+    o3_baseline_level: float | None = None
 
 
 @dataclass
@@ -141,6 +144,25 @@ NO_HOT_WINDOWS = ((218.0, 226.3), (231.0, 239.0))
 NO_HOT_MIN_CORRELATION = 0.3
 NO_HOT_MAX_RATIO = 1.5                 # amplitude clip vs the cold NO coefficient
 
+# O3 tail refinement (O3-dominant spectra only, mean OD(240-270) > 1):
+#  - saturation guard: at Hartley-peak OD > ~2.5 only a few % of the light
+#    survives, so stray light compresses the measured OD there and drags the
+#    O3 amplitude down; those points are excluded so the flanks anchor O3.
+#  - hot wing: the Hartley red wing (~290-330 nm) strengthens with gas
+#    temperature, so the room-temperature sigma underestimates it in plasma;
+#    the wing gets its own non-negative amplitude (windowed copy of the O3
+#    column) that scales with O3 and is folded back into the O3 column.
+#  - broadband baseline: plasma-generated aerosol scattering / lamp drift add
+#    a smooth continuum (~1e-2 OD) that otherwise masquerades as HONO + NO2
+#    in the 320-400 nm tail; two gentle terms (flat and (250/lambda)^2),
+#    active only above ~300 nm, absorb it.
+DEFAULT_O3_TAIL_FIT = True
+O3_TAIL_MIN_AVG_OD = 1.0               # mean OD in 240-270 nm -> "O3-dominant"
+O3_SAT_OD = 2.5                        # smoothed-OD ceiling for fit points
+O3_WING_RAMP = (288.0, 296.0, 324.0, 332.0)   # cosine ramp up / flat / ramp down
+O3_BASELINE_RAMP = (297.0, 307.0)      # continuum terms ramp in above this
+O3_WING_MAX_RATIO = 1.0                # wing amplitude clip vs O3 coefficient
+
 # Backward-compatible aliases (used by existing internal helper functions)
 OD_CLIP_THRESHOLD = DEFAULT_OD_CLIP_THRESHOLD
 OD_AVG_COEFF = DEFAULT_OD_AVG_COEFF
@@ -163,6 +185,7 @@ class FitConfig:
     no_fwhm_delta: float = DEFAULT_NO_FWHM_DELTA               # nm, manual mode only
     no_peak_emphasis: float = DEFAULT_NO_PEAK_EMPHASIS         # 0 (off) … 1 (match peaks)
     no_hot_band: bool = DEFAULT_NO_HOT_BAND
+    o3_tail_fit: bool = DEFAULT_O3_TAIL_FIT
 
 
 def _decode_text(raw: bytes) -> str:
@@ -659,6 +682,135 @@ def _match_no_basis_column(
         right=0.0,
     )
     return aligned, info, (chosen_delta if fwhm_mode != "off" else None)
+
+
+def _cosine_ramp(x: np.ndarray, start: float, end: float) -> np.ndarray:
+    """0 -> 1 raised-cosine ramp between start and end (start < end)."""
+    t = np.clip((x - start) / max(end - start, 1e-9), 0.0, 1.0)
+    return 0.5 - 0.5 * np.cos(np.pi * t)
+
+
+def _refine_o3_tail(
+    basis: np.ndarray,
+    wavelengths: np.ndarray,
+    absorbance: np.ndarray,
+    coefficients: np.ndarray,
+    species: list[str],
+    excluded_indices: list[int],
+    min_fit_fraction: float,
+) -> tuple[np.ndarray, np.ndarray | None, float | None, float | None]:
+    """O3-dominant tail refinement: saturation guard + hot wing + baseline.
+
+    Gated on a Hartley-band mean OD(240-270) above O3_TAIL_MIN_AVG_OD and a
+    positive O3 coefficient. Refits every non-excluded species jointly with a
+    windowed O3-wing column and two gentle continuum terms, on points below
+    the stray-light saturation ceiling. The wing is folded back into the O3
+    basis column; the continuum is returned separately as baseline_od.
+    Modifies `basis` in place; returns (coefficients, baseline_od,
+    wing_scale, baseline_level) or unchanged inputs and Nones when gated off.
+    """
+    if "O3" not in species:
+        return coefficients, None, None, None
+    index_o3 = species.index("O3")
+    if index_o3 in excluded_indices or coefficients[index_o3] <= 0.0:
+        return coefficients, None, None, None
+
+    hartley = (wavelengths >= 240.0) & (wavelengths <= 270.0)
+    if not hartley.any() or float(np.mean(absorbance[hartley])) <= O3_TAIL_MIN_AVG_OD:
+        return coefficients, None, None, None
+    if float(np.max(wavelengths)) < 340.0:
+        return coefficients, None, None, None
+
+    smoothed = _smooth_signal(absorbance, window=11)
+    fit_rows = np.where(smoothed <= O3_SAT_OD)[0]
+    if fit_rows.size <= min_fit_fraction * absorbance.size:
+        return coefficients, None, None, None
+
+    up0, up1, down0, down1 = O3_WING_RAMP
+    wing_window = _cosine_ramp(wavelengths, up0, up1) * (
+        1.0 - _cosine_ramp(wavelengths, down0, down1)
+    )
+    wing_col = basis[:, index_o3] * wing_window
+
+    base_ramp = _cosine_ramp(wavelengths, *O3_BASELINE_RAMP)
+    cont_flat = base_ramp
+    cont_blue = base_ramp * (250.0 / wavelengths) ** 2
+
+    keep_cols = np.array(
+        [i for i in range(basis.shape[1]) if i not in excluded_indices], dtype=int
+    )
+    design = np.column_stack([basis[:, keep_cols], wing_col, cont_flat, cont_blue])
+    fitted, _ = _fit_nnls_scaled(
+        design[fit_rows],
+        absorbance[fit_rows],
+        total_count=absorbance.size,
+        min_fit_fraction=min_fit_fraction,
+    )
+    if not np.any(fitted):
+        return coefficients, None, None, None
+
+    updated = np.zeros_like(coefficients)
+    updated[keep_cols] = fitted[: keep_cols.size]
+    wing_amp, base_flat, base_blue = fitted[keep_cols.size:]
+
+    # HONO peak guard: with the broadband baseline in place, any remaining
+    # HONO amplitude must fit under the measured band tops. When the top two
+    # HONO peaks still exceed the (smoothed) measurement — the condition the
+    # hono_exceed diagnostic flags — clip the HONO amplitude to the most
+    # restrictive peak and refit everything else against the remainder.
+    if "HONO" in species:
+        index_hono = species.index("HONO")
+        hono_coeff = float(updated[index_hono])
+        if index_hono not in excluded_indices and hono_coeff > 0.0:
+            rec_full = design @ fitted
+            hono_od = basis[:, index_hono] * hono_coeff
+            peaks = _find_local_maxima(hono_od)
+            if peaks.size > 0:
+                top = peaks[np.argsort(hono_od[peaks])[::-1][:2]]
+                scales = []
+                for p in top:
+                    if hono_od[p] <= 0.0:
+                        continue
+                    allowed = smoothed[p] - (rec_full[p] - hono_od[p])
+                    scales.append(np.clip(allowed / hono_od[p], 0.0, 1.0))
+                if scales and min(scales) < 0.98:
+                    scale = float(min(scales))
+                    hono_fixed = basis[:, index_hono] * hono_coeff * scale
+                    keep2 = np.array(
+                        [i for i in keep_cols if i != index_hono], dtype=int
+                    )
+                    design2 = np.column_stack(
+                        [basis[:, keep2], wing_col, cont_flat, cont_blue]
+                    )
+                    fitted2, _ = _fit_nnls_scaled(
+                        design2[fit_rows],
+                        (absorbance - hono_fixed)[fit_rows],
+                        total_count=absorbance.size,
+                        min_fit_fraction=min_fit_fraction,
+                    )
+                    if np.any(fitted2):
+                        updated = np.zeros_like(coefficients)
+                        updated[keep2] = fitted2[: keep2.size]
+                        updated[index_hono] = hono_coeff * scale
+                        wing_amp, base_flat, base_blue = fitted2[keep2.size:]
+
+    o3_coeff = float(updated[index_o3])
+    wing_scale = None
+    if o3_coeff > 0.0 and wing_amp > 0.0:
+        wing_amp = float(min(wing_amp, O3_WING_MAX_RATIO * o3_coeff))
+        basis[:, index_o3] = basis[:, index_o3] + wing_col * (wing_amp / o3_coeff)
+        wing_scale = round(1.0 + wing_amp / o3_coeff, 3)
+
+    baseline_od = base_flat * cont_flat + base_blue * cont_blue
+    if not np.any(baseline_od > 0.0):
+        baseline_od = None
+        baseline_level = None
+    else:
+        tail = wavelengths >= 350.0
+        baseline_level = float(np.median(baseline_od[tail])) if tail.any() else float(
+            np.median(baseline_od)
+        )
+    return updated, baseline_od, wing_scale, baseline_level
 
 
 def _fit_no_hot_band(
@@ -1357,12 +1509,31 @@ def run_linear_regression(
             repeat_count += 1
         excluded_indices = sorted(excluded_set)
 
+    baseline_od: np.ndarray | None = None
+    o3_wing_scale: float | None = None
+    o3_baseline_level: float | None = None
+    if cfg.o3_tail_fit:
+        coefficients, baseline_od, o3_wing_scale, o3_baseline_level = _refine_o3_tail(
+            basis=basis,
+            wavelengths=absorbance.wavelengths,
+            absorbance=absorbance.values,
+            coefficients=coefficients,
+            species=cross_sections.species,
+            excluded_indices=list(excluded_indices),
+            min_fit_fraction=cfg.min_fit_fraction,
+        )
+    # NO-band refinements below see the OD with the broadband baseline removed,
+    # so a mixed spectrum cannot double-count the continuum.
+    values_no = (
+        absorbance.values if baseline_od is None else absorbance.values - baseline_od
+    )
+
     no_hot_ratio: float | None = None
     if cfg.no_hot_band and no_align_shifts:
         coefficients, no_hot_ratio = _fit_no_hot_band(
             basis=basis,
             wavelengths=absorbance.wavelengths,
-            absorbance=absorbance.values,
+            absorbance=values_no,
             coefficients=coefficients,
             species=cross_sections.species,
             excluded_indices=list(excluded_indices),
@@ -1376,7 +1547,7 @@ def run_linear_regression(
         coefficients, no_band_scales = _refine_no_band_amplitudes(
             basis=basis,
             wavelengths=absorbance.wavelengths,
-            absorbance=absorbance.values,
+            absorbance=values_no,
             coefficients=coefficients,
             species=cross_sections.species,
             excluded_indices=list(excluded_indices),
@@ -1388,12 +1559,14 @@ def run_linear_regression(
 
     hono_exceed = _evaluate_hono_exceed(
         basis=basis,
-        absorbance=absorbance.values,
+        absorbance=values_no,
         coefficients=coefficients,
         species=cross_sections.species,
     )
 
     reconstructed = basis @ coefficients
+    if baseline_od is not None:
+        reconstructed = reconstructed + baseline_od
     per_species_od = basis * coefficients[np.newaxis, :]
     number_densities = coefficients / max(path_length_cm, 1e-12)
     metrics = compute_metrics(absorbance.values, reconstructed)
@@ -1412,6 +1585,9 @@ def run_linear_regression(
         no_fwhm_delta=no_fwhm_delta,
         no_band_scales=no_band_scales,
         no_hot_ratio=no_hot_ratio,
+        baseline_od=baseline_od,
+        o3_wing_scale=o3_wing_scale,
+        o3_baseline_level=o3_baseline_level,
     )
 
 

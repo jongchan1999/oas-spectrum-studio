@@ -840,6 +840,7 @@ def _fit_config_dict(config: FitConfig) -> dict:
         "no_fwhm_delta": float(config.no_fwhm_delta),
         "no_peak_emphasis": float(config.no_peak_emphasis),
         "no_hot_band": bool(config.no_hot_band),
+        "o3_tail_fit": bool(config.o3_tail_fit),
     }
 
 
@@ -1125,6 +1126,8 @@ def render_diagnostics(
     no_fwhm_delta: float | None = None,
     no_band_scales: dict | None = None,
     no_hot_ratio: float | None = None,
+    o3_wing_scale: float | None = None,
+    o3_baseline_level: float | None = None,
 ) -> None:
     chips = []
     if repeat_count is not None:
@@ -1145,6 +1148,15 @@ def render_diagnostics(
         chips.append(
             f"<span class='chip chip-accent'>NO hot band (v″=1): "
             f"{no_hot_ratio:.2f}× cold</span>"
+        )
+    if o3_wing_scale is not None or o3_baseline_level is not None:
+        parts = []
+        if o3_wing_scale is not None:
+            parts.append(f"wing ×{o3_wing_scale:.2f}")
+        if o3_baseline_level is not None:
+            parts.append(f"baseline {o3_baseline_level:.1e}")
+        chips.append(
+            f"<span class='chip chip-accent'>O3 tail: {' · '.join(parts)}</span>"
         )
     if clip_applied is not None:
         chips.append(
@@ -1196,6 +1208,7 @@ _FIT_CONFIG_DEFAULTS: dict[str, float | int | bool | str] = {
     "cfg_no_fwhm_delta": 0.0,
     "cfg_no_peak_emphasis": float(DEFAULT_NO_PEAK_EMPHASIS),
     "cfg_no_hot_band": True,
+    "cfg_o3_tail_fit": True,
 }
 
 
@@ -1317,6 +1330,18 @@ def render_sidebar() -> tuple[str, FitConfig]:
                       "present; the hot/cold amplitude ratio is shown as a chip."),
             )
 
+            o3_tail_fit = st.checkbox(
+                "O3 tail refinement (wing + baseline)",
+                key="cfg_o3_tail_fit",
+                help=("For O3-dominated spectra (Hartley OD > 1): exclude "
+                      "stray-light-saturated points (OD > 2.5) so the flanks "
+                      "anchor O3, give the temperature-sensitive Hartley red "
+                      "wing (~290-330 nm) its own amplitude, and fit a smooth "
+                      "broadband baseline (aerosol scattering / lamp drift) "
+                      "above ~300 nm so it no longer masquerades as HONO/NO2. "
+                      "Inactive for NOx-mode spectra."),
+            )
+
             o3_mode = st.session_state.setdefault("o3_mode", "off")
             bcols = st.columns(2)
             bcols[0].button(
@@ -1359,6 +1384,7 @@ def render_sidebar() -> tuple[str, FitConfig]:
             no_fwhm_delta=float(no_fwhm_delta),
             no_peak_emphasis=float(no_peak_emphasis),
             no_hot_band=bool(no_hot_band),
+            o3_tail_fit=bool(o3_tail_fit),
         )
 
         st.markdown("---")
@@ -1483,7 +1509,10 @@ def run_single_analysis(
                 "no_fwhm_delta": result.regression.no_fwhm_delta,
                 "no_band_scales": dict(result.regression.no_band_scales or {}),
                 "no_hot_ratio": result.regression.no_hot_ratio,
+                "o3_wing_scale": result.regression.o3_wing_scale,
+                "o3_baseline_level": result.regression.o3_baseline_level,
             },
+            "baseline_od": result.regression.baseline_od,
             "_native": result,
         }
 
@@ -1768,6 +1797,8 @@ def render_single_page(selected_cross: str, config: FitConfig) -> None:
             per_species_frame = pd.DataFrame({"wavelength": result["wavelengths"]})
             for idx, name in enumerate(result["species"]):
                 per_species_frame[name] = result["per_species_od"][:, idx]
+            if result.get("baseline_od") is not None:
+                per_species_frame["Baseline"] = result["baseline_od"]
             st.plotly_chart(
                 make_overlay_figure(
                     wavelengths=result["wavelengths"],
@@ -1972,6 +2003,7 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                     metrics = s.regression.metrics
                     per_species_od = s.regression.per_species_od
                     species = s.regression.species
+                    baseline_od = s.regression.baseline_od
                     diag = {
                         "repeat_count": s.regression.repeat_count,
                         "clip_applied": s.regression.clip_applied,
@@ -1981,6 +2013,8 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                         "no_fwhm_delta": s.regression.no_fwhm_delta,
                         "no_band_scales": dict(s.regression.no_band_scales or {}),
                         "no_hot_ratio": s.regression.no_hot_ratio,
+                        "o3_wing_scale": s.regression.o3_wing_scale,
+                        "o3_baseline_level": s.regression.o3_baseline_level,
                     }
                 else:
                     m = ts_payload["single_results"][sel]
@@ -1990,12 +2024,15 @@ def render_timeseries_page(selected_cross: str, config: FitConfig) -> None:
                     metrics = m.metrics
                     per_species_od = m.per_species_od
                     species = m.species
+                    baseline_od = None
                     diag = None
 
                 render_metric_row(metrics)
                 per_species_frame = pd.DataFrame({"wavelength": wavelengths})
                 for idx, name in enumerate(species):
                     per_species_frame[name] = per_species_od[:, idx]
+                if baseline_od is not None:
+                    per_species_frame["Baseline"] = baseline_od
                 st.plotly_chart(
                     make_overlay_figure(
                         wavelengths=wavelengths,
