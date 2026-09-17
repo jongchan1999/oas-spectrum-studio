@@ -24,6 +24,11 @@ PLOT_TEMPLATE = "plotly_white"
 PRIMARY_COLOR = "#0f172a"
 ACCENT_COLOR = "#f97316"
 
+# Validation overlay uses a log OD axis: absorption spans several decades, and
+# the interesting weak bands live at 1e-3..1e-1 where a linear axis flattens
+# them. Points at or below zero (noise) simply fall below the floor.
+OD_LOG_FLOOR = 1e-4
+
 
 def _base_layout(title: str, height: int = 420) -> dict:
     return {
@@ -59,7 +64,7 @@ def make_overlay_figure(
     reconstructed: np.ndarray,
     species_frame: pd.DataFrame | None = None,
     title: str = "Measured vs Reconstructed",
-    log_y: bool = False,
+    log_y: bool = True,
 ) -> go.Figure:
     figure = go.Figure()
     figure.add_trace(
@@ -104,7 +109,21 @@ def make_overlay_figure(
     figure.update_xaxes(gridcolor="rgba(15,23,42,0.06)", zeroline=False)
 
     if log_y:
-        figure.update_yaxes(type="log", gridcolor="rgba(15,23,42,0.06)", zeroline=False)
+        stacked = np.concatenate([
+            np.asarray(measured, dtype=float),
+            np.asarray(reconstructed, dtype=float),
+        ])
+        positive = stacked[np.isfinite(stacked) & (stacked > 0)]
+        top = float(np.max(positive)) * 1.5 if positive.size else 1.0
+        top = max(top, OD_LOG_FLOOR * 10)
+        figure.update_yaxes(
+            type="log",
+            range=[np.log10(OD_LOG_FLOOR), np.log10(top)],
+            dtick=1,
+            tickformat=".0e",
+            gridcolor="rgba(15,23,42,0.06)",
+            zeroline=False,
+        )
     else:
         figure.update_yaxes(
             type="linear",
